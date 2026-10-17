@@ -1,0 +1,33 @@
+name: Test and package
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ['3.8', '3.13']
+        exclude:
+          - os: macos-latest
+            python: '3.8'
+    runs-on: ${{ matrix.os }}
+    env:
+      DESK_STATUS_SKIP_REAL: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python scripts/build_ui.py --check
+      - run: python -B -m unittest discover -s tests -p 'test_*.py' -v
+      - run: python scripts/package.py
+      - uses: actions/upload-artifact@v4
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.13'
+        with:
+          name: desk-status-packages
+          path: dist/*.zip

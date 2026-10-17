@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "desk-status": {
+      "command": "python3",
+      "args": ["-B", "./server/desk_status_server.py"],
+      "cwd": "."
+    }
+  }
+}

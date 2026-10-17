@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "desk-status": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["-B", "./server/desk_status_server.py"],
+      "cwd": "./"
+    }
+  }
+}

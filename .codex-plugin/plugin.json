@@ -1,0 +1,21 @@
+{
+  "name": "desk-status",
+  "version": "0.2.4",
+  "description": "Read-only local Codex session status panel: context usage, logged quota snapshot, prompt cache hit rate, log-estimated output speed, API-price cost estimate and git status.",
+  "author": { "name": "zhuangziyi" },
+  "license": "MIT",
+  "keywords": ["codex", "session", "status", "context", "tokens", "mcp-app"],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "会话状态",
+    "shortDescription": "在对话旁查看本机 Codex 会话的上下文、额度、缓存、输出速度与费用估算",
+    "longDescription": "只读读取本机 Codex 会话日志，在侧栏或对话旁的面板中显示上下文占用、日志中的额度快照、提示缓存命中率、按日志估算的输出速度、按内置 API 价表估算的费用与 git 状态。不联网、不修改任何文件。",
+    "developerName": "zhuangziyi",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Read"],
+    "brandColor": "#2864F0",
+    "composerIcon": "./assets/tool-icon.svg",
+    "logo": "./assets/logo.svg",
+    "screenshots": []
+  }
+}

@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<title>会话状态</title>
+<style>/*__CSS__*/</style>
+</head>
+<body>
+<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="g-water" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" style="stop-color:var(--accent-2)"/>
+      <stop offset="1" style="stop-color:var(--accent)"/>
+    </linearGradient>
+
+    <!-- 16px set: 1.35 stroke, round joins; secondary shapes take the duotone tint. -->
+    <!-- A model switch: two opposed arrows. -->
+    <symbol id="i-swap" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 5.5h9.5M10 3l2.5 2.5L10 8"/>
+      <path d="M13 10.5H3.5M6 8l-2.5 2.5L6 13"/>
+    </symbol>
+    <!-- The session's bill: a receipt with a torn foot, 1.15 stroke, centred in 14×16. -->
+    <symbol id="i-receipt" viewBox="0 0 14 16" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 2.5h8v11l-1.6-1-1.2 1-1.2-1-1.2 1-1.2-1L3 13.5z"/>
+      <path d="M5 6h4M5 8.6h4"/>
+    </symbol>
+    <symbol id="i-more" viewBox="0 0 16 16" fill="currentColor" stroke="none">
+      <circle cx="3.6" cy="8" r="1.25"/><circle cx="8" cy="8" r="1.25"/><circle cx="12.4" cy="8" r="1.25"/>
+    </symbol>
+    <!-- The session id's mark, as on the desktop strip: a 12px tag, 1.15 stroke, centred in 14×16. -->
+    <symbol id="i-tag" viewBox="0 0 14 16" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round">
+      <path d="M2.2 4.6v3.6l5.6 5.6 4-4-5.6-5.6H2.2z"/>
+      <circle cx="4.9" cy="6.6" r="0.95"/>
+    </symbol>
+    <symbol id="i-refresh" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13.1 8.4A5.15 5.15 0 1 1 11.6 4.3"/>
+      <path d="M12.1 1.95v2.65H9.45"/>
+    </symbol>
+    <symbol id="i-theme" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35">
+      <circle cx="8" cy="8" r="5.6"/>
+      <path d="M8 2.4a5.6 5.6 0 0 1 0 11.2z" fill="currentColor" stroke="none"/>
+    </symbol>
+    <symbol id="i-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4.6 6.3 8 9.7l3.4-3.4"/>
+    </symbol>
+    <symbol id="i-copy" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round">
+      <rect x="5.4" y="5.4" width="8" height="8" rx="2"/>
+      <path d="M10.6 5.2V4.2a1.6 1.6 0 0 0-1.6-1.6H4.2a1.6 1.6 0 0 0-1.6 1.6V9a1.6 1.6 0 0 0 1.6 1.6h1" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m3.6 8.4 2.9 2.8 5.9-6.2"/>
+    </symbol>
+    <symbol id="i-chat" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
+      <path class="duo" d="M3.2 3h9.6c.66 0 1.2.54 1.2 1.2v5.8c0 .66-.54 1.2-1.2 1.2H8.6L5.4 13.4v-2.2H3.2c-.66 0-1.2-.54-1.2-1.2V4.2C2 3.54 2.54 3 3.2 3z" stroke="none" opacity=".55"/>
+      <path d="M3.2 3h9.6c.66 0 1.2.54 1.2 1.2v5.8c0 .66-.54 1.2-1.2 1.2H8.6L5.4 13.4v-2.2H3.2c-.66 0-1.2-.54-1.2-1.2V4.2C2 3.54 2.54 3 3.2 3z"/>
+    </symbol>
+    <symbol id="i-pin" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
+      <path class="duo" d="M5.7 2.4h4.6l-.5 3.6 2.3 2.4H3.9l2.3-2.4z" stroke="none" opacity=".55"/>
+      <path d="M5.7 2.4h4.6l-.5 3.6 2.3 2.4H3.9l2.3-2.4zM8 8.4v5.2"/>
+    </symbol>
+    <symbol id="i-back" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6.2 4 3 7.2l3.2 3.2"/>
+      <path d="M3.4 7.2h6.1a3.5 3.5 0 0 1 0 7H7.8"/>
+    </symbol>
+    <symbol id="i-branch" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="4.6" cy="3.6" r="1.45"/><circle cx="4.6" cy="12.4" r="1.45"/><circle cx="11.4" cy="5.2" r="1.45"/>
+      <path d="M4.6 5.05v5.9M11.4 6.65c0 2.6-2.2 3.2-4.4 3.6-1 .2-1.9.6-2.4 1.3"/>
+    </symbol>
+    <symbol id="i-folder" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round">
+      <path class="duo" d="M2.2 5.6h11.6v6.2c0 .7-.5 1.2-1.2 1.2H3.4c-.7 0-1.2-.5-1.2-1.2z" stroke="none" opacity=".5"/>
+      <path d="M2.2 4.2c0-.7.5-1.2 1.2-1.2h2.8l1.4 1.6h5c.7 0 1.2.5 1.2 1.2v6c0 .7-.5 1.2-1.2 1.2H3.4c-.7 0-1.2-.5-1.2-1.2z"/>
+    </symbol>
+    <symbol id="i-warn" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
+      <path class="duo" d="M7.1 2.7a1 1 0 0 1 1.8 0l5 9.1a1 1 0 0 1-.9 1.5H3a1 1 0 0 1-.9-1.5z" stroke="none" opacity=".45"/>
+      <path d="M7.1 2.7a1 1 0 0 1 1.8 0l5 9.1a1 1 0 0 1-.9 1.5H3a1 1 0 0 1-.9-1.5zM8 6.3v2.9"/>
+      <circle cx="8" cy="11.2" r=".8" fill="currentColor" stroke="none"/>
+    </symbol>
+    <symbol id="i-sigma" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
+      <circle class="duo" cx="8" cy="8" r="6.2" stroke="none" opacity=".45"/>
+      <path d="M10.4 5.1H5.6L8.3 8l-2.7 2.9h4.8"/>
+    </symbol>
+
+    <!-- Clepsydra: the water clock that gives the project its internal name. -->
+    <symbol id="art-clepsydra" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 10.5h36"/>
+      <path d="M16 10.5 20.6 25a3 3 0 0 0 2.86 2.1h17.08A3 3 0 0 0 43.4 25L48 10.5"/>
+      <path class="water" d="M18.6 17.2h26.8l-2.3 7.3a2.4 2.4 0 0 1-2.3 1.7H23.2a2.4 2.4 0 0 1-2.3-1.7z" stroke="none"/>
+      <path d="M32 27.1v4.4" opacity=".7"/>
+      <path class="drop" d="M32 34.4c.9 1.2 1.4 2 1.4 2.7a1.4 1.4 0 0 1-2.8 0c0-.7.5-1.5 1.4-2.7z" stroke="none"/>
+      <path d="M17.5 40.5v9.5a4 4 0 0 0 4 4h21a4 4 0 0 0 4-4v-9.5"/>
+      <path class="water" d="M18.25 47.2h27.5V50a3.3 3.3 0 0 1-3.3 3.3H21.55A3.3 3.3 0 0 1 18.25 50z" stroke="none" opacity=".75"/>
+      <path d="M50.5 42.6h3.2M50.5 46.6h2.2M50.5 50.6h3.2" opacity=".55"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div id="app" class="app" data-tab="context">
+  <div id="banner-slot"></div>
+
+  <!-- the session's threads: the main agent and the subagents it spawned, one viewed at a time -->
+  <div class="threads" id="threads" hidden></div>
+
+  <nav class="ribbon-wrap" id="ribbon-wrap" aria-label="指标" hidden>
+    <div class="ribbon" id="ribbon" role="tablist" aria-label="指标">
+      <button type="button" role="tab" class="tab" id="tab-context" data-tab="context" aria-controls="panel" aria-selected="true" tabindex="0">
+        <span class="tab-name"><span class="tab-icon" data-glyph="context" aria-hidden="true"></span><span class="tab-label">上下文</span></span>
+        <span class="tab-read"><span class="tab-fig"><span class="tab-value" data-v="context" data-slot="pct">—</span><span class="tab-suffix">已用</span></span></span>
+      </button>
+      <button type="button" role="tab" class="tab" id="tab-quota" data-tab="quota" aria-controls="panel" aria-selected="false" tabindex="-1">
+        <span class="tab-name"><span class="tab-icon" data-glyph="quota" aria-hidden="true"></span><span class="tab-label" data-l="quota">额度</span></span>
+        <span class="tab-read"><span class="tab-fig"><span class="tab-value" data-v="quota" data-slot="pct">—</span><span class="tab-suffix">已用</span></span></span>
+      </button>
+      <button type="button" role="tab" class="tab" id="tab-cache" data-tab="cache" aria-controls="panel" aria-selected="false" tabindex="-1">
+        <span class="tab-name"><span class="tab-icon" data-glyph="cache" aria-hidden="true"></span><span class="tab-label">缓存</span><span class="tab-flag" hidden></span></span>
+        <span class="tab-read"><span class="tab-fig"><span class="tab-value" data-v="cache" data-slot="pct">—</span><span class="tab-suffix" data-s="cache">命中</span></span><span class="tab-time" hidden></span></span>
+      </button>
+      <button type="button" role="tab" class="tab" id="tab-speed" data-tab="speed" aria-controls="panel" aria-selected="false" tabindex="-1">
+        <span class="tab-name"><span class="tab-icon" data-glyph="speed" aria-hidden="true"></span><span class="tab-label">速度</span><span class="tab-flag" hidden></span></span>
+        <span class="tab-read"><span class="tab-fig"><span class="tab-value" data-v="speed" data-slot="rate">—</span><span class="tab-suffix">tok/s</span></span></span>
+      </button>
+      <button type="button" role="tab" class="tab" id="tab-session" data-tab="session" aria-controls="panel" aria-selected="false" tabindex="-1">
+        <span class="tab-name"><span class="tab-icon line" aria-hidden="true"><svg viewBox="0 0 14 16" width="14" height="16" focusable="false"><use href="#i-receipt"/></svg></span><span class="tab-label">会话</span></span>
+        <span class="tab-read"><span class="tab-fig"><span class="tab-value" data-v="session">—</span><span class="tab-suffix" data-s="session" hidden></span></span></span>
+      </button>
+    </div>
+  </nav>
+
+  <div class="pinned" id="binding-note" hidden></div>
+
+  <main class="panel" id="panel" role="tabpanel" aria-labelledby="tab-context" tabindex="-1"></main>
+
+  <footer class="foot" id="foot">
+    <span class="foot-left"><span id="foot-binding"></span><button type="button" class="git" id="foot-git" hidden></button></span>
+    <span class="foot-right">
+      <span class="sync" id="sync" data-state="connecting"></span>
+      <button type="button" class="icon-btn" id="btn-refresh" aria-label="立即刷新" title="立即刷新">
+        <svg aria-hidden="true" focusable="false"><use href="#i-refresh"/></svg>
+      </button>
+      <button type="button" class="icon-btn" id="btn-menu" aria-label="会话与外观" title="会话与外观" aria-haspopup="true" aria-expanded="false" aria-controls="menu">
+        <svg aria-hidden="true" focusable="false"><use href="#i-more"/></svg>
+      </button>
+      <div class="menu" id="menu" role="group" aria-label="会话与外观" hidden>
+        <div class="menu-group">
+          <label class="menu-label" for="session-select">查看会话</label>
+          <div class="select-wrap" id="select-wrap">
+            <svg class="select-lead" id="select-lead" aria-hidden="true" focusable="false"><use href="#i-chat"/></svg>
+            <select id="session-select" class="select" disabled>
+              <option value="">读取中…</option>
+            </select>
+            <svg class="select-chev" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg>
+          </div>
+          <div class="id-line menu-id" id="menu-id" hidden>
+            <span id="menu-id-text"></span>
+            <button type="button" class="icon-btn copy-btn" id="menu-copy" aria-label="复制完整会话 ID" title="复制完整会话 ID">
+              <svg aria-hidden="true" focusable="false"><use href="#i-copy"/></svg>
+            </button>
+          </div>
+        </div>
+        <div id="menu-dyn"></div>
+      </div>
+    </span>
+  </footer>
+</div>
+
+<div class="sr-only" id="announcer" role="status" aria-live="polite"></div>
+<div class="toast-slot" id="toast-slot"></div>
+<script>/*__JS__*/</script>
+</body>
+</html>
