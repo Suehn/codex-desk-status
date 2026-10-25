@@ -20,6 +20,47 @@ spec.loader.exec_module(install)
 
 
 class DistributionTest(unittest.TestCase):
+    def installed_result(self, root, **overrides):
+        plugin = dict(name='desk-status', pluginId='desk-status@desk-status-local',
+                      version='0.2.2', enabled=True,
+                      marketplaceSource={'sourceType': 'local', 'source': root})
+        plugin.update(overrides)
+        return subprocess.CompletedProcess([], 0, json.dumps({'installed': [plugin]}), '')
+
+    def test_update_finds_existing_local_marketplace_without_guessing_cache_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(install.subprocess, 'run', return_value=self.installed_result(tmp)) as run:
+                self.assertEqual(install.installed_local_marketplace('codex-test'), tmp)
+                self.assertEqual(run.call_args[0][0], ['codex-test', 'plugin', 'list', '--json'])
+
+    def test_update_does_not_replace_git_or_disabled_installs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for changes in ({'marketplaceSource': {'sourceType': 'git', 'source': 'https://example.invalid/repo'}},
+                            {'enabled': False}):
+                with patch.object(install.subprocess, 'run', return_value=self.installed_result(tmp, **changes)):
+                    with self.assertRaises(SystemExit):
+                        install.installed_local_marketplace('codex-test')
+
+    def test_update_requires_an_unambiguous_existing_install(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            one = json.loads(self.installed_result(tmp).stdout)['installed'][0]
+            for data in ({'installed': []}, {'installed': [one, one]}, {}, {'installed': None}):
+                result = subprocess.CompletedProcess([], 0, json.dumps(data), '')
+                with patch.object(install.subprocess, 'run', return_value=result):
+                    with self.assertRaises(SystemExit):
+                        install.installed_local_marketplace('codex-test')
+
+    def test_update_reinstalls_after_staging_in_existing_marketplace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            install.stage(tmp, 'desk-status-local')
+            listed = self.installed_result(tmp)
+            success = subprocess.CompletedProcess([], 0)
+            with patch.object(sys, 'argv', ['install.py', '--update-installed']), \
+                    patch.object(install.subprocess, 'run', side_effect=[listed, success, success]) as run:
+                self.assertEqual(install.main(), 0)
+            self.assertEqual(run.call_args_list[1][0][0], ['codex', 'plugin', 'marketplace', 'add', tmp, '--json'])
+            self.assertEqual(run.call_args_list[2][0][0], ['codex', 'plugin', 'add', 'desk-status@desk-status-local', '--json'])
+
     def test_install_keeps_other_plugins_and_uninstall_keeps_marketplace(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

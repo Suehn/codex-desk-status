@@ -94,6 +94,42 @@ class SegmentTest(unittest.TestCase):
         return sum(u["responses"] for u in snap_session["usage"])
 
     # ---- the format as it is -------------------------------------------------
+    def test_empty_interrupted_base_then_fresh_and_carried_segments(self):
+        # Codex Desktop 0.164 can leave only an aborted startup in the base file.
+        # All real requests live in a fresh segment and a later history_base segment.
+        base = Rollout(T)
+        base.start_turn(model="gpt-6-astra", effort="max", window=380_000)
+        base.abort_turn()
+        base.write(self.root, name_time="2026-10-25T10-00-00")
+        svc = self.svc()
+        before = svc.snapshot(host_meta={"threadId": T})["session"]
+        self.assertEqual(before["turn"]["status"], "interrupted")
+        self.assertEqual(before["context"]["state"], "no_data")
+        self.assertEqual(self.responses(before), 0)
+
+        fresh = Rollout(T, segment_id=X, start_ms=base.t + 4000, turn_n=base.turn_n)
+        fresh.start_turn(model="gpt-6-astra", effort="max", window=380_000)
+        standard_response(fresh, 500, 2000, out=500, inp=80_000, cached=60_000, window=380_000)
+        fresh.complete_turn()
+        fresh.write(self.root, name_time="2026-10-25T10-00-04")
+        carried = fresh.carry_on(Y, len(fresh.lines), start_ms=fresh.t + 60_000)
+        carried.start_turn(model="gpt-6-astra", effort="max", window=380_000)
+        standard_response(carried, 1000, 3000, out=1000, inp=100_000, cached=90_000, window=380_000)
+        carried.write(self.root, name_time="2026-10-25T10-01-08")
+        svc.index._scanned_at = 0.0
+        snap = svc.snapshot(host_meta={"threadId": T}, include_sessions=True)
+        after = snap["session"]
+        self.assertEqual(after["file"]["segments"], 3)
+        self.assertEqual(after["turn"]["status"], "active")
+        self.assertEqual(after["context"]["usedTokens"], 101_000)
+        self.assertEqual(after["cache"]["latest"]["ratio"], 0.9)
+        self.assertEqual(after["throughput"]["aggregate"]["samples"], 2)
+        self.assertGreater(self.cost(after), 0)
+        self.assertEqual(self.responses(after), 2)
+        self.assertEqual(self.responses(svc.snapshot(host_meta={"threadId": T})["session"]), 2)
+        self.assertEqual([row["id"] for row in snap["sessions"]], [T])
+        self.assertEqual(snap["warnings"], [])
+
     def test_a_carried_on_file_is_the_same_session(self):
         base, seg, p1, p2 = self.write_pair()
         svc = self.svc()

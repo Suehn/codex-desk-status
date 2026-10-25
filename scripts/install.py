@@ -3,6 +3,7 @@
 
     python3 scripts/install.py --marketplace DIR            # stage only
     python3 scripts/install.py --marketplace DIR --register # also run `codex plugin ...`
+    python3 scripts/install.py --update-installed          # update the existing local install
     python3 scripts/install.py --marketplace DIR --uninstall  # remove only this plugin
 
 Staging copies the plugin's runtime files to DIR/plugins/desk-status and adds
@@ -35,6 +36,32 @@ from package import PLUGIN_FILES, expand  # noqa: E402
 
 PLUGIN = "desk-status"
 DEFAULT_MARKET = "desk-status-local"
+
+
+def installed_local_marketplace(codex: str) -> str:
+    """Resolve the existing install through Codex, not a guessed cache path."""
+    result = subprocess.run([codex, "plugin", "list", "--json"],
+                            capture_output=True, text=True, timeout=30)
+    if result.returncode:
+        raise SystemExit(result.stderr.strip() or "codex plugin list failed")
+    try:
+        data = json.loads(result.stdout)
+        installed = [p for p in data["installed"] if p.get("name") == PLUGIN]
+    except (ValueError, KeyError, TypeError, AttributeError):
+        raise SystemExit("codex plugin list returned an unrecognized response")
+    if len(installed) != 1:
+        raise SystemExit("expected one installed desk-status plugin; use --marketplace DIR to select its destination")
+    plugin = installed[0]
+    source = plugin.get("marketplaceSource") or {}
+    if not isinstance(source, dict) or source.get("sourceType") != "local":
+        raise SystemExit("--update-installed is for local marketplaces; for Git installs, run codex plugin marketplace upgrade followed by codex plugin add")
+    root = source.get("source")
+    if not isinstance(root, str) or not os.path.isabs(root) or not os.path.isdir(root):
+        raise SystemExit("installed local marketplace is missing; use --marketplace DIR to select its destination")
+    if not plugin.get("enabled"):
+        raise SystemExit("desk-status is disabled; use --marketplace DIR --register to explicitly enable it")
+    print(f"updating installed {plugin['pluginId']} (currently {plugin.get('version', 'unknown')})", flush=True)
+    return root
 
 
 def set_python(dest: str, python: str) -> None:
@@ -125,13 +152,20 @@ def unstage(market_dir: str) -> tuple:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--marketplace", required=True, help="marketplace root directory to create/update")
+    target = ap.add_mutually_exclusive_group(required=True)
+    target.add_argument("--marketplace", help="marketplace root directory to create/update")
+    target.add_argument("--update-installed", action="store_true", help="find and update the existing enabled local install, including its Codex cache")
     ap.add_argument("--name", default=DEFAULT_MARKET, help="marketplace name for a new marketplace file")
     ap.add_argument("--register", action="store_true", help="also run codex plugin marketplace add / plugin add")
     ap.add_argument("--codex", default="codex", help="codex executable")
     ap.add_argument("--python", default="python3", help="interpreter command written into the staged MCP config (Windows: python or py)")
     ap.add_argument("--uninstall", action="store_true", help="remove only this plugin from the marketplace directory")
     ns = ap.parse_args()
+    if ns.update_installed:
+        if ns.uninstall:
+            ap.error("--update-installed cannot be combined with --uninstall")
+        ns.marketplace = installed_local_marketplace(ns.codex)
+        ns.register = True
     if ns.uninstall:
         name, empty = unstage(ns.marketplace)
         cmds = [[ns.codex, "plugin", "remove", f"{PLUGIN}@{name}", "--json"]]
@@ -165,6 +199,7 @@ def main():
         r = subprocess.run(c)
         if r.returncode:
             return r.returncode
+    print("installed; close and reopen the status panel. If it still reports the old version, restart Codex after active tasks finish.")
     return 0
 
 

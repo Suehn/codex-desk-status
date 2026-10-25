@@ -1,6 +1,6 @@
 {
   "name": "desk-status",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Read-only local Codex session status panel: context usage, logged quota snapshot, prompt cache hit rate, log-estimated output speed, API-price cost estimate and git status.",
   "author": { "name": "zhuangziyi" },
   "license": "MIT",

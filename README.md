@@ -54,6 +54,16 @@ codex plugin add desk-status@codex-desk-status
 
 更新后完全重启桌面应用。ZIP 用户下载新包，在同一个 marketplace 目录重新运行安装命令。
 
+如果之前安装的是本地版（如 `desk-status@desk-status-local` 的 0.2.2），下载新包或更新源码后，在新版本目录执行：
+
+```sh
+python3 scripts/install.py --update-installed
+```
+
+这会通过 `codex plugin list --json` 找到现有本地 marketplace，更新源文件并重新安装 Codex 缓存。只更新源码或另加一个 GitHub marketplace，不会替换原来启用的本地版。此命令要求恰好存在一个已启用的本地安装；多个安装时用 `--marketplace DIR --register` 明确指定。Windows 使用 `py scripts/install.py --update-installed --python python`。
+
+安装完成后关闭并重新打开「会话状态」，在右下角菜单的「诊断信息」中核对版本为 **0.2.5**。如果仍是旧版，等当前任务结束后再重启 Codex。
+
 GitHub 安装的卸载命令：
 
 ```sh
@@ -97,6 +107,8 @@ python3 scripts/install.py --marketplace ~/codex-desk-status-local --uninstall -
 ```sh
 python3 -B server/desk_status_server.py --print-roots
 ```
+
+如果额度、子代理费用能显示，但主代理的上下文、缓存、速度都是「—」，并一直显示「已中断 / 还没有完成的请求」，先核对诊断信息中的插件版本。0.2.2 只读取会话最初的日志；当前 Codex 可能把实际请求写入后续分段。0.2.4 起已有分段读取支持，0.2.5 增加了上述本地更新入口和这一故障形态的回归检查。
 
 插件仅能读取它所在系统上的日志：本机运行的插件不能自动读取另一台主机上的会话。Codex 日志格式和宿主绑定字段可能随版本改变；没有足够数据时应显示未知，发现错误可提交 Issue。请勿在 Issue 中上传原始会话日志、聊天正文或凭据。
 

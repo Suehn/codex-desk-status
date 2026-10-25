@@ -1,5 +1,7 @@
 ## 指标口径
 
+日志按会话读取：最初的 `rollout-…-<thread>.jsonl` 和经元数据核对的 `rollout-…-<thread>_<segment>.jsonl` 合并为同一会话。后续文件可能从 ordinal 0 开始，也可能通过 `history_base` 指向前一文件的字节位置和 ordinal；仅文件名相似不够。响应按 `response_id` 去重，上下文、缓存和速度使用续写后的读数。2026-10-25 已用 Codex Desktop `0.164.0-alpha.11.1` 的本地日志验证“空的中断首段 → 新段 → 引用前段的续写”这一格式；[App Server 文档](https://learn.chatgpt.com/docs/app-server#turn-events)中的 `thread/tokenUsage/updated` 是通知接口，插件实际读取本地持久化日志。
+
 | 指标 | 计算方式 |
 | --- | --- |
 | 上下文占用 | 最近一次响应的 `total_tokens` ÷ `model_context_window`。按单次响应计算，**不是**整个对话的累计用量。压缩后显示「刚压缩」，下一次响应后才有新读数。 |
