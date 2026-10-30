@@ -1066,7 +1066,7 @@ svg { flex: none; }
 (function () {
   "use strict";
 
-  var APP_INFO = { name: "desk-status-panel", version: "0.2.5" };
+  var APP_INFO = { name: "desk-status-panel", version: "0.2.6" };
   var PROTOCOL_VERSION = "2026-01-26";
   var SNAPSHOT_KEY = "desk-status/snapshot";
   var SCHEMA = "desk-status/2";
@@ -1211,8 +1211,12 @@ svg { flex: none; }
   // request at its own rates (server/desk_status/pricing.py); the panel adds them up and says
   // it is an estimate. Nothing here knows a price.
   // ------------------------------------------------------------------
-  function isFast(tier) { return tier === "priority" || tier === "fast"; }
-  function tierName(tier) { return isFast(tier) ? "Fast" : "标准"; }
+  function tierName(tier) {
+    var value = typeof tier === "string" ? tier.trim().toLowerCase() : "";
+    if (!value || value === "default" || value === "standard") return "标准";
+    if (value === "priority" || value === "fast") return "Fast";
+    return value === "ultrafast" ? "Ultrafast" : value;
+  }
   function fmtUsd(v) {
     if (!isNum(v)) return "—";
     if (v === 0) return "$0";
@@ -2170,7 +2174,7 @@ svg { flex: none; }
     var leftMin = o && o.phase === "within" ? Math.ceil(o.left / 60000) : null;
     var sc = s ? sessionCost(s) : null;
     var key = JSON.stringify([!!s, c && [c.state, c.ratio], qw, cache && cache.latest && cache.latest.ratio, o && [o.phase, o.until, leftMin],
-      t && [t.current, t.model, t.aggregate && t.aggregate.tokensPerSecond], group.map(function (g) { return g.tokensPerSecond; }),
+      t && [t.current, t.model, t.effort, t.serviceTier, t.aggregate && t.aggregate.tokensPerSecond], group.map(function (g) { return g.tokensPerSecond; }),
       sc && [sc.priced, sc.total, sc.tokens, sc.usageMissing]]);
     keyed("ribbon", key, function () {
       // context
@@ -2208,10 +2212,10 @@ svg { flex: none; }
       ct.hidden = phase !== "within" && phase !== "beyond";
       // speed
       var tps = t && t.aggregate ? t.aggregate.tokensPerSecond : null;
-      // a speed from the model or effort before a switch: the figure stays, quieter, and says so
+      // a speed from the settings before a switch: the figure stays, quieter, and says so
       var before = isNum(tps) && t.current === false;
       setTab_("speed", isNum(tps) ? fmtRate(tps) : "—", isNum(tps) ? (before ? "quiet" : null) : "muted",
-        "输出速度，" + (isNum(tps) ? (before ? "切换前的 " + [t.model, t.effort].filter(Boolean).join(" · ") + "，" : "") +
+        "输出速度，" + (isNum(tps) ? (before ? "切换前的 " + [t.model, t.effort, tierName(t.serviceTier)].filter(Boolean).join(" · ") + "，" : "") +
           "近 " + t.aggregate.samples + " 次平均 " + fmtRate(tps) + " tok/s" : "暂无数据"),
         { flag: before ? "切换前" : "" });
       glyphInto("speed", columnsGlyph(group.map(function (g) { return g.tokensPerSecond; })));
@@ -3060,7 +3064,8 @@ svg { flex: none; }
       cacheMissing += u.cacheMissing || 0;
       usageMissing += u.usageMissing || 0;
       longResponses += u.longResponses || 0;
-      var label = (u.model || "未知模型") + (isFast(u.serviceTier) ? " · Fast" : "");
+      var mode = tierName(u.serviceTier);
+      var label = (u.model || "未知模型") + (mode !== "标准" ? " · " + mode : "");
       if (!byLabel[label]) { byLabel[label] = { label: label, responses: 0, cost: 0, priced: true }; models.push(byLabel[label]); }
       byLabel[label].responses += u.responses;
       byLabel[label].cost += cost;
@@ -3278,16 +3283,16 @@ svg { flex: none; }
     speed: function (s) {
       var t = s.throughput || {};
       var agg = t.aggregate, latest = t.latest;
-      // the replies drawn: the latest timed ones on this model and effort, the averaged among
+      // the replies drawn: the latest timed ones on this model, effort and tier, the averaged among
       // them, oldest first (the server draws every averaged reply)
       var series = (t.series || []).filter(function (x) { return isNum(x.tokensPerSecond); });
-      var d = { title: "输出速度", dot: "output", key: [agg, latest && [latest.at, latest.valid], t.current, t.model, t.effort, series.map(function (x) { return x.at; })] };
+      var d = { title: "输出速度", dot: "output", key: [agg, latest && [latest.at, latest.valid], t.current, t.model, t.effort, t.serviceTier, series.map(function (x) { return x.at; })] };
       if (!agg || !isNum(agg.tokensPerSecond)) {
         d.value = "—"; d.tone = "muted"; d.unit = "tok/s";
         d.notes = [{ text: !t.model || !t.effort ? "等待记录模型与推理强度。" : "还没有可计时的响应。" }];
         return d;
       }
-      d.src = (t.current === false ? "切换前 · " : "") + [t.model, t.effort].filter(Boolean).join(" · ");
+      d.src = (t.current === false ? "切换前 · " : "") + [t.model, t.effort, tierName(t.serviceTier)].filter(Boolean).join(" · ");
       if (t.current === false) d.dot = null;
       d.value = fmtRate(agg.tokensPerSecond); d.unit = "tok/s";
       // under the figure, what it is; while a reply's column is chosen, that reply
@@ -3309,7 +3314,7 @@ svg { flex: none; }
         { v: fmtRate(g.tokensPerSecond), u: "tok/s", k: lastUntimed ? "上次计时" : "最近一次", tip: fmtWhen(g.at) + " 的回复" },
         secsCell(g.durationMs, "用时"),
         tokCell(g.outputTokens, "输出", { tip: fmtInt(g.outputTokens) + " tokens" }),
-        { v: String(series.length), u: "次", k: "图中回复", tip: "同一模型与推理强度最近 " + series.length + " 次有计时的回复；点线是其中近 " + agg.samples + " 次的平均" }];
+        { v: String(series.length), u: "次", k: "图中回复", tip: "同一模型、推理强度与速度档位最近 " + series.length + " 次有计时的回复；点线是其中近 " + agg.samples + " 次的平均" }];
       d.fn = { text: "日志估算：输出 tokens ÷ 记录时长，含推理", tip: "平均按总量算：近 " + agg.samples + " 次共 " + fmtK(agg.outputTokens) + " tokens ÷ " + fmtSecs(agg.durationMs) };
       if (lastUntimed) d.notes = [{ text: "最近一次回复不计时：" + (INVALID[latest.reason] || "没有可用的计时") + "。" }];
       return d;
@@ -3353,7 +3358,7 @@ svg { flex: none; }
         d.value = sc.tokens ? fmtK(sc.tokens) : "—"; d.unit = sc.tokens ? "tokens" : ""; if (!sc.tokens) d.tone = "muted";
         d.legend = shown.map(function (p) { return { sw: p[2], v: fmtK(sc.parts[p[0]][0]), k: p[1], tip: fmtInt(sc.parts[p[0]][0]) + " tokens" }; });
         d.viz = sc.tokens ? bar(PARTS.map(function (p) { return [sc.parts[p[0]][0] / sc.tokens, p[2]]; }), "本会话 " + fmtK(sc.tokens) + " tokens") : null;
-        d.notes.push({ text: sc.partial ? "部分模型不在内置价表中，不显示合计费用。" : "模型不在内置价表中，只显示 tokens。" });
+        d.notes.push({ text: sc.partial ? "部分模型或档位未收录单价，不显示合计费用。" : "该模型或档位未收录单价，只显示 tokens。" });
       }
       // gaps in what the log recorded: said where the figure is, not rounded into it
       if (sc.usageMissing) d.notes.push({ text: sc.usageMissing + " 次请求缺少输入或输出用量，" + (sc.priced ? "金额" : "合计") + "只含已记录的部分。" });

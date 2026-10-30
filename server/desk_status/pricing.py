@@ -9,7 +9,8 @@ The figures are an estimate at OpenAI API list prices as recorded in this table 
 
 ``input_tokens`` is the whole prompt; cached reads and cache writes are parts of it.
 Rates are USD per 1M tokens: (input, cache read, cache write, output). A missing write rate
-bills writes as input; a missing Fast or long-context rate falls back to the one listed.
+bills writes as input. Unlisted models or service tiers are left unpriced; a missing
+long-context rate uses the listed rate for that same service tier.
 
 Long context is a per-model rule: a model priced that way names the prompt size above which
 the long-context rates apply to the whole request (``long_above``); a model without it never
@@ -20,15 +21,20 @@ from __future__ import annotations
 
 from typing import Any, Dict, NamedTuple, Optional, Tuple
 
-PRICES_AS_OF = "2026-10"
+PRICES_AS_OF = "2026-10-30"
+# https://developers.openai.com/api/docs/pricing (Standard, Fast, Ultrafast)
 
 Rates = Tuple[float, float, Optional[float], float]
 
-# model -> {"std", "fast"?, "long_above"?, "std_long"?, "fast_long"?}
+# model -> {"std", "fast"?, "ultrafast"?, "long_above"?, "<tier>_long"?}
 TABLE: Dict[str, Dict[str, Any]] = {
     "gpt-6.1-sol": {"std": (2, 0.1, 2.5, 10), "fast": (4, 0.2, 5, 20),
+                    "ultrafast": (12, 0.6, 15, 60), "ultrafast_long": (24, 1.2, 30, 90),
                     "long_above": 272_000, "std_long": (4, 0.2, 5, 15), "fast_long": (8, 0.4, 10, 30)},
+    "gpt-6.1-terra": {"std": (1, 0.05, 1.25, 5), "fast": (2, 0.1, 2.5, 10),
+                      "long_above": 272_000, "std_long": (2, 0.1, 2.5, 7.5), "fast_long": (4, 0.2, 5, 15)},
     "gpt-6-astra": {"std": (10, 1, 12.5, 50), "fast": (20, 2, 25, 100),
+                    "ultrafast": (60, 6, 75, 300), "ultrafast_long": (120, 12, 150, 450),
                     "long_above": 272_000, "std_long": (20, 2, 25, 75), "fast_long": (40, 4, 50, 150)},
     "gpt-6-sol": {"std": (2, 0.2, 2.5, 10), "fast": (4, 0.4, 5, 20),
                   "long_above": 272_000, "std_long": (4, 0.4, 5, 15), "fast_long": (8, 0.8, 10, 30)},
@@ -60,13 +66,16 @@ class Rate(NamedTuple):
     read: float
     write: float
     output: float
-    fast: bool
+    tier: str
     long: bool
 
 
-def is_fast(tier: Optional[str]) -> bool:
-    """"priority" is the tier OpenAI renamed Fast; anything else is Standard."""
-    return tier in ("priority", "fast")
+def speed_mode(tier: Optional[str]) -> str:
+    """Normalize documented aliases without treating an unknown tier as Standard."""
+    value = tier.strip().lower() if isinstance(tier, str) else ""
+    if value in ("", "default", "standard"):
+        return "standard"
+    return "fast" if value == "priority" else value
 
 
 def model_entry(model: Optional[str]) -> Optional[Dict[str, Any]]:
@@ -83,18 +92,18 @@ def rate_for(model: Optional[str], tier: Optional[str], input_tokens: Optional[i
     m = model_entry(model)
     if m is None:
         return None
-    fast = is_fast(tier) and "fast" in m
+    mode = speed_mode(tier)
+    key = "std" if mode == "standard" else mode
+    if key not in ("std", "fast", "ultrafast") or key not in m:
+        return None
     long = is_long(model, input_tokens)
-    if long:
-        r = (m.get("fast_long") or m["fast"]) if fast else (m.get("std_long") or m["std"])
-    else:
-        r = m["fast"] if fast else m["std"]
-    return Rate(r[0], r[1], r[0] if r[2] is None else r[2], r[3], fast, long)
+    r = m.get(key + "_long", m[key]) if long else m[key]
+    return Rate(r[0], r[1], r[0] if r[2] is None else r[2], r[3], mode, long)
 
 
 def request_cost(model: Optional[str], tier: Optional[str], usage: Dict[str, int]) -> Optional[Dict[str, Any]]:
-    """One request at its own rates: the USD cost of each part, or None when the model is not
-    in the table. Two kinds of gap in the log are priced as they stand and flagged:
+    """One request at its own rates: the USD cost of each part, or None when the model/tier
+    combination is not in the table. Two kinds of gap in the log are priced as they stand and flagged:
 
     - ``cacheMissing``: the cached-read count, or the cache-write count where this model prices
       writes apart from input, was not recorded. The request is priced as if none of its prompt
@@ -128,4 +137,4 @@ def public_rate(model: Optional[str], tier: Optional[str], input_tokens: Optiona
     r = rate_for(model, tier, input_tokens)
     if r is None:
         return None
-    return {"input": r.input, "read": r.read, "write": r.write, "output": r.output, "fast": r.fast, "long": r.long}
+    return {"input": r.input, "read": r.read, "write": r.write, "output": r.output, "tier": r.tier, "long": r.long}

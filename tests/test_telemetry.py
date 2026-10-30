@@ -91,6 +91,60 @@ class TelemetryTest(unittest.TestCase):
         self.assertEqual(len(log.state.samples), 1)
         self.assertEqual(log.state.counters["duplicateUsage"], 1)
 
+    def test_speed_and_cost_follow_each_applied_service_tier(self):
+        r = Rollout(fixture_uuid(1))
+        r.start_turn(model="gpt-6.1-sol", effort="high")
+        for tier, output in (("default", 100), ("priority", 200), ("fast", 200), ("ultrafast", 600)):
+            r.thread_settings("gpt-6.1-sol", "high", tier)
+            standard_response(r, 0, 1000, out=output, inp=1000, cached=0, tail_wait_ms=0)
+        log = self.load(r)
+        self.assertEqual([s["serviceTier"] for s in log.state.samples],
+                         ["default", "priority", "fast", "ultrafast"])
+        t = self.throughput(log)
+        self.assertEqual(t["serviceTier"], "ultrafast")
+        self.assertEqual(t["aggregate"]["samples"], 1)
+        self.assertEqual(t["aggregate"]["tokensPerSecond"], 600)
+        self.assertEqual([s["matches"] for s in t["recent"]], [False, False, False, True])
+        self.assertAlmostEqual(log.state.samples[-1]["cost"], .012 + .036)
+        # priority and fast name the same speed mode and should share a sample group.
+        r.thread_settings("gpt-6.1-sol", "high", "priority")
+        t = self.throughput(self.load(r))
+        self.assertEqual(t["aggregate"]["samples"], 2)
+        self.assertEqual(t["aggregate"]["tokensPerSecond"], 200)
+
+    def test_tier_switch_without_response_keeps_previous_speed_label(self):
+        r = Rollout(fixture_uuid(1))
+        r.start_turn(model="gpt-6-astra", effort="high")
+        r.thread_settings("gpt-6-astra", "high", "default")
+        standard_response(r, 0, 1000, out=100, inp=1000, cached=0, tail_wait_ms=0)
+        r.thread_settings("gpt-6-astra", "high", "ultrafast")
+        t = self.throughput(self.load(r))
+        self.assertFalse(t["current"])
+        self.assertEqual(t["serviceTier"], "default")
+        self.assertEqual(t["aggregate"]["tokensPerSecond"], 100)
+
+    def test_late_usage_retains_its_turns_service_tier(self):
+        r = Rollout(fixture_uuid(1))
+        old = r.start_turn(model="gpt-6.1-terra", effort="high")
+        r.thread_settings("gpt-6.1-terra", "high", "default")
+        r.start_turn(model="gpt-6-astra", effort="high")
+        r.thread_settings("gpt-6-astra", "high", "ultrafast")
+        r.item("AgentMessage", 1000, turn_id=old)
+        r.usage(1000, 0, 100, turn_id=old)
+        s = self.load(r).state.samples[-1]
+        self.assertEqual((s["model"], s["serviceTier"]), ("gpt-6.1-terra", "default"))
+        self.assertAlmostEqual(s["cost"], .0015)
+
+    def test_explicit_turn_context_tier_overrides_previous_setting(self):
+        r = Rollout(fixture_uuid(1))
+        r.start_turn(model="gpt-6.1-sol", effort="high")
+        r.thread_settings("gpt-6.1-sol", "high", "ultrafast")
+        r._emit("turn_context", {"turn_id": r.turn_id, "model": "gpt-6.1-sol", "effort": "high", "service_tier": None})
+        standard_response(r, 0, 1000, out=100, inp=1000, cached=0, tail_wait_ms=0)
+        s = self.load(r).state.samples[-1]
+        self.assertIsNone(s["serviceTier"])
+        self.assertAlmostEqual(s["cost"], .003)
+
     def test_tool_only_response_has_no_timing(self):
         r = Rollout(fixture_uuid(1))
         r.start_turn()

@@ -17,7 +17,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(ROOT, "server"))
 
-from fixture_builder import build_edge_fixtures, build_harness_fixtures  # noqa: E402
+from fixture_builder import Rollout, fixture_uuid, standard_response, build_edge_fixtures, build_harness_fixtures  # noqa: E402
 from desk_status.discovery import SessionIndex  # noqa: E402
 from desk_status.gitinfo import GitCache  # noqa: E402
 from desk_status.status import StatusService  # noqa: E402
@@ -36,6 +36,20 @@ class UiSmoke(unittest.TestCase):
         ids.update(build_edge_fixtures(c, now))
         svc = StatusService(SessionIndex([a, b, c]), GitCache(enabled=False))
         snaps = {r: svc.snapshot(manual_id=ids[r], include_sessions=True) for r in ROLES}
+        speed_root = os.path.join(cls.tmp, "speed-tiers")
+        for n, (role, model, tier) in enumerate((
+                ("ultrafast", "gpt-6.1-sol", "ultrafast"),
+                ("terra", "gpt-6.1-terra", "default"),
+                ("unpriced-tier", "gpt-6.1-terra", "ultrafast"),
+                ("tier-switched", "gpt-6.1-sol", "default"))):
+            r = Rollout(fixture_uuid(800 + n), start_ms=now - 10000)
+            r.start_turn(model=model, effort="high")
+            r.thread_settings(model, "high", tier)
+            standard_response(r, 0, 1000, out=1000, inp=100000, cached=50000, tail_wait_ms=0)
+            if role == "tier-switched":
+                r.thread_settings(model, "high", "ultrafast")
+            r.write(speed_root)
+            snaps[role] = StatusService(SessionIndex([speed_root]), GitCache(enabled=False)).snapshot(manual_id=r.id)
         # a thread run on into a second file: joined, and with a copy of its first file beside it
         # (which does not join, and is said to leave the record possibly short)
         from test_segments import T, OTHER, base_thread, next_file  # noqa: E402
@@ -279,6 +293,29 @@ class UiSmoke(unittest.TestCase):
         self.assertIn("日志估算", t)
         self.assertNotIn("第一个 token", t)
         self.assertIn("tok/s", self.out["alpha"]["speed"]["ribbon"])
+
+    def test_ultrafast_labels_and_price_survive_rendering(self):
+        s = self.out["ultrafast"]
+        self.assertEqual(s["errors"], [])
+        # 50k uncached * $12/M + 50k cached * $0.6/M + 1k output * $60/M.
+        self.assertIn("$0.69", s["session"]["text"])
+        for card in ("session", "cache", "speed"):
+            self.assertIn("Ultrafast", s[card]["text"])
+
+    def test_terra_61_is_priced_and_unknown_tier_explained(self):
+        s = self.out["terra"]
+        self.assertEqual(s["errors"], [])
+        self.assertIn("gpt-6.1-terra", s["session"]["text"])
+        self.assertIn("$0.06", s["session"]["text"])
+        unpriced = self.out["unpriced-tier"]
+        self.assertIn("Ultrafast", unpriced["session"]["text"])
+        self.assertIn("该模型或档位未收录单价", unpriced["session"]["text"])
+
+    def test_tier_switch_labels_the_previous_speed(self):
+        s = self.out["tier-switched"]
+        self.assertIn("切换前", s["speed"]["text"])
+        self.assertIn("标准", s["speed"]["text"])
+        self.assertIn("Ultrafast", s["session"]["text"])
 
     def test_readings_are_name_then_figure(self):
         """The F card's quiet rows: each reading is its name, then its figure; the parts of a

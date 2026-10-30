@@ -26,6 +26,47 @@ def total_cost(session):
 
 
 class PricingRules(unittest.TestCase):
+    def test_terra_61_rates_and_context_boundary(self):
+        for tier, expected in (("default", (1, 0.05, 1.25, 5)),
+                               ("priority", (2, 0.1, 2.5, 10))):
+            with self.subTest(tier=tier):
+                short = pricing.rate_for("gpt-6.1-terra", tier, 272_000)
+                long = pricing.rate_for("gpt-6.1-terra", tier, 272_001)
+                self.assertEqual(tuple(short[:4]), expected)
+                self.assertEqual(tuple(long[:4]), (expected[0] * 2, expected[1] * 2,
+                                                   expected[2] * 2, expected[3] * 1.5))
+                self.assertFalse(short.long)
+                self.assertTrue(long.long)
+
+    def test_ultrafast_is_six_times_standard_including_cache_and_long_context(self):
+        for model in ("gpt-6-astra", "gpt-6.1-sol"):
+            for prompt in (272_000, 272_001):
+                with self.subTest(model=model, prompt=prompt):
+                    std = pricing.rate_for(model, "default", prompt)
+                    ultra = pricing.rate_for(model, "ultrafast", prompt)
+                    for base, accelerated in zip(std[:4], ultra[:4]):
+                        self.assertAlmostEqual(accelerated, base * 6)
+                    self.assertEqual(ultra.tier, "ultrafast")
+                    self.assertEqual(ultra.long, std.long)
+                    usage = {"input_tokens": prompt, "cached_input_tokens": 100_000,
+                             "cache_write_input_tokens": 10_000, "output_tokens": 1000}
+                    regular = pricing.request_cost(model, "default", usage)
+                    accelerated = pricing.request_cost(model, "ultrafast", usage)
+                    for part in ("read", "write", "uncached", "output"):
+                        self.assertAlmostEqual(accelerated[part], regular[part] * 6)
+
+    def test_unlisted_model_tiers_are_unpriced_instead_of_standard(self):
+        for model, tier in (("gpt-6.1-terra", "ultrafast"), ("gpt-6-astra", "future-tier"),
+                            ("gpt-5.1", "fast")):
+            self.assertIsNone(pricing.rate_for(model, tier, 1000))
+            self.assertIsNone(pricing.request_cost(model, tier, {"input_tokens": 1000, "output_tokens": 10}))
+
+    def test_service_tier_aliases(self):
+        self.assertEqual({pricing.speed_mode(t) for t in (None, "default", "standard")}, {"standard"})
+        self.assertEqual(pricing.rate_for("gpt-6-astra", "priority", 1000),
+                         pricing.rate_for("gpt-6-astra", "fast", 1000))
+        self.assertEqual(pricing.speed_mode(" ULTRAFAST "), "ultrafast")
+
     def test_long_context_is_a_per_model_rule_on_each_request(self):
         self.assertTrue(pricing.is_long("gpt-6-astra", 300_000))
         self.assertFalse(pricing.is_long("gpt-6-astra", 272_000))

@@ -104,6 +104,16 @@ class ProtocolTest(unittest.TestCase):
         err = self.s.call("resources/read", {"uri": "ui://desk-status/../secret"})["error"]
         self.assertEqual(err["code"], -32002)
 
+    def test_saved_panel_resource_identity_survives_plugin_updates(self):
+        # Codex persists the published URI in open/restored tabs even after refreshing
+        # tools/list. It must keep resolving while the bundle version moves forward.
+        res = self.s.call("resources/read", {"uri": "ui://desk-status/panel-0.2.5"})
+        self.assertNotIn("error", res)
+        from desk_status import __version__
+        html = res["result"]["contents"][0]["text"]
+        self.assertIn('version: "' + __version__ + '"', html)
+        self.assertEqual(res["result"]["contents"][0]["uri"], UI_RESOURCE_URI)
+
     def test_open_status_binds_from_explicit_meta(self):
         r = self.s.call("tools/call", {"name": "open_status", "arguments": {}, "_meta": {"threadId": self.ids["alpha"]}})["result"]
         self.assertEqual(r["structuredContent"]["binding"], "host")

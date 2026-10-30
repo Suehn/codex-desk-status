@@ -229,7 +229,7 @@ class SessionState:
         self.effort: Optional[str] = None
         self.cwd: Optional[str] = None
         self.settings_source: Optional[str] = None
-        # "priority" (renamed Fast by OpenAI) or None for the standard tier; from thread_settings_applied
+        # Raw logged tier: default, priority/fast, ultrafast, or an unrecognized value.
         self.service_tier: Optional[str] = None
 
         # Token and cost totals per (model, service tier) over every response read, each response
@@ -237,7 +237,7 @@ class SessionState:
         # long-context requests adds up the same in its total, its parts and its cost line.
         self.usage_by_model: BoundedDict = BoundedDict(USAGE_BUCKETS)
 
-        self.turn_settings: BoundedDict = BoundedDict(TURN_HISTORY)  # turn_id -> (model, effort)
+        self.turn_settings: BoundedDict = BoundedDict(TURN_HISTORY)  # turn_id -> (model, effort, tier)
         self.turns: BoundedDict = BoundedDict(TURN_HISTORY)  # turn_id -> dict
         self.current_turn_id: Optional[str] = None
 
@@ -328,9 +328,11 @@ class SessionState:
             cm = p.get("collaboration_mode")
             if isinstance(cm, dict) and isinstance(cm.get("settings"), dict):
                 effort = as_str(cm["settings"].get("reasoning_effort"), 32)
+        if "service_tier" in p:
+            self.service_tier = as_str(p.get("service_tier"), 32)
         turn_id = as_str(p.get("turn_id"), 128)
         if turn_id and (model or effort):
-            self.turn_settings[turn_id] = (model, effort)
+            self.turn_settings[turn_id] = (model, effort, self.service_tier)
         if model:
             self.model = model
         if effort:
@@ -355,6 +357,11 @@ class SessionState:
             self.settings_source = "thread_settings"
         if "service_tier" in s:
             self.service_tier = as_str(s.get("service_tier"), 32)
+        # Desktop applies settings after turn_context. Keep the tier with that active turn
+        # so delayed usage from older turns is not priced at a newer turn's tier.
+        turn = self.turns.get(self.current_turn_id)
+        if turn and turn.get("status") == "active":
+            self.turn_settings[self.current_turn_id] = (self.model, self.effort, self.service_tier)
         cwd = as_str(s.get("cwd"))
         if cwd:
             self.cwd = cwd
@@ -445,9 +452,9 @@ class SessionState:
             )
 
         # ---- throughput sample ----
-        model, effort, label_source = None, None, None
+        model, effort, tier, label_source = None, None, self.service_tier, None
         if turn_id and turn_id in self.turn_settings:
-            model, effort = self.turn_settings[turn_id]
+            model, effort, tier = self.turn_settings[turn_id]
             label_source = "turn_context"
         elif self.model or self.effort:
             model, effort = self.model, self.effort
@@ -493,7 +500,7 @@ class SessionState:
             "inputTokens": usage.get("input_tokens"),
             "cachedInputTokens": usage.get("cached_input_tokens"),
             "cacheWriteInputTokens": usage.get("cache_write_input_tokens"),
-            "serviceTier": self.service_tier,
+            "serviceTier": tier,
             "outputTokens": output,
             "reasoningTokens": usage.get("reasoning_output_tokens"),
             "totalTokens": usage.get("total_tokens"),
@@ -503,11 +510,11 @@ class SessionState:
             "invalidReason": reason,
             "tokensPerSecond": (output * 1000.0 / duration) if valid and duration else None,
         }
-        cost = request_cost(model, self.service_tier, usage)
+        cost = request_cost(model, tier, usage)
         sample["cost"] = None if cost is None else cost["read"] + cost["write"] + cost["uncached"] + cost["output"]
         sample["costFlags"] = None if cost is None else (cost["long"], cost["cacheMissing"], cost["usageMissing"])
         self.samples.append(sample)
-        self._add_usage(model, self.service_tier, usage, cost)
+        self._add_usage(model, tier, usage, cost)
 
         # New response boundary for this turn.
         if turn_id and ts is not None:

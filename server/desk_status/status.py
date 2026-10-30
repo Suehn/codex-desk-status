@@ -18,7 +18,7 @@ from .discovery import (
     short_id,
 )
 from .gitinfo import GitCache
-from .pricing import PRICES_AS_OF, public_rate, request_cost
+from .pricing import PRICES_AS_OF, public_rate, request_cost, speed_mode
 from .telemetry import SessionLog, SessionState
 
 THROUGHPUT_GROUP = 5
@@ -508,29 +508,33 @@ class StatusService:
     def _throughput(st: SessionState) -> Dict[str, Any]:
         samples = list(st.samples)
 
-        def group(model: Optional[str], effort: Optional[str], limit: int) -> List[Dict[str, Any]]:
-            """The latest valid samples on this model and effort, newest first, from every
+        def matches(s: Dict[str, Any], model: Optional[str], effort: Optional[str], tier: Optional[str]) -> bool:
+            return bool(model and effort and s["model"] == model and s["effort"] == effort
+                        and speed_mode(s.get("serviceTier")) == speed_mode(tier))
+
+        def group(model: Optional[str], effort: Optional[str], tier: Optional[str], limit: int) -> List[Dict[str, Any]]:
+            """The latest valid samples on this model, effort and tier, newest first, from every
             sample kept, not only the last few: replies without timing in between do not
             push the averaged ones out of view."""
             out: List[Dict[str, Any]] = []
             if model and effort:
                 for s in reversed(samples):
-                    if s["valid"] and s["model"] == model and s["effort"] == effort:
+                    if s["valid"] and matches(s, model, effort, tier):
                         out.append(s)
                         if len(out) >= limit:
                             break
             return out
 
-        # The model and effort now set; until a response has run on them (a switch just made),
+        # The model, effort and tier now set; until a response has run on them (a switch just made),
         # the ones the latest timed response ran on, said so rather than shown as no data.
-        model, effort = st.model, st.effort
-        drawn = group(model, effort, THROUGHPUT_SERIES)
+        model, effort, tier = st.model, st.effort, st.service_tier
+        drawn = group(model, effort, tier, THROUGHPUT_SERIES)
         current = True
         if not drawn:
             last = next((s for s in reversed(samples) if s["valid"] and s["model"] and s["effort"]), None)
-            if last is not None and (last["model"], last["effort"]) != (model, effort):
-                model, effort, current = last["model"], last["effort"], False
-                drawn = group(model, effort, THROUGHPUT_SERIES)
+            if last is not None and not matches(last, model, effort, tier):
+                model, effort, tier, current = last["model"], last["effort"], last.get("serviceTier"), False
+                drawn = group(model, effort, tier, THROUGHPUT_SERIES)
         # the average is the newest of the drawn ones, so every reply it is made of is drawn
         matching = drawn[:THROUGHPUT_GROUP]
         series = [
@@ -562,7 +566,7 @@ class StatusService:
                     "tokensPerSecond": s["tokensPerSecond"],
                     "valid": s["valid"],
                     "reason": s["invalidReason"],
-                    "matches": bool(model and effort and s["model"] == model and s["effort"] == effort),
+                    "matches": matches(s, model, effort, tier),
                 }
             )
 
@@ -574,6 +578,7 @@ class StatusService:
                 "at": s["at"],
                 "model": s["model"],
                 "effort": s["effort"],
+                "serviceTier": s.get("serviceTier"),
                 "outputTokens": s["outputTokens"],
                 "reasoningTokens": s["reasoningTokens"],
                 "inputTokens": s["inputTokens"],
@@ -581,12 +586,13 @@ class StatusService:
                 "tokensPerSecond": s["tokensPerSecond"],
                 "valid": s["valid"],
                 "reason": s["invalidReason"],
-                "matches": bool(model and effort and s["model"] == model and s["effort"] == effort),
+                "matches": matches(s, model, effort, tier),
             }
 
         return {
             "model": model,
             "effort": effort,
+            "serviceTier": tier,
             "current": current,
             "aggregate": aggregate,
             "latest": pub(latest),

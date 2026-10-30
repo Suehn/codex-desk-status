@@ -89,9 +89,12 @@ class Rollout:
         self._emit("turn_context", {"turn_id": self.turn_id, "model": model, "effort": effort})
         return self
 
-    def thread_settings(self, model: str, effort: str) -> "Rollout":
+    def thread_settings(self, model: str, effort: str, tier: Optional[str] = None) -> "Rollout":
+        settings = {"model": model, "reasoning_effort": effort}
+        if tier is not None:
+            settings["service_tier"] = tier
         self._emit("event_msg", {"type": "thread_settings_applied", "thread_id": self.id,
-                                 "thread_settings": {"model": model, "reasoning_effort": effort}})
+                                 "thread_settings": settings})
         return self
 
     def item(self, kind: str, duration_ms: int, start_ms: Optional[int] = None, turn_id: Optional[str] = None) -> "Rollout":
