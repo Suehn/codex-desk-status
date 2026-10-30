@@ -62,7 +62,7 @@ python3 scripts/install.py --update-installed
 
 这会通过 `codex plugin list --json` 找到现有本地 marketplace，更新源文件并重新安装 Codex 缓存。只更新源码或另加一个 GitHub marketplace，不会替换原来启用的本地版。此命令要求恰好存在一个已启用的本地安装；多个安装时用 `--marketplace DIR --register` 明确指定。Windows 使用 `py scripts/install.py --update-installed --python python`。
 
-安装完成后关闭并重新打开「会话状态」，在右下角菜单的「诊断信息」中核对版本为 **0.2.5**。如果仍是旧版，等当前任务结束后再重启 Codex。
+安装完成后关闭并重新打开「会话状态」，在右下角菜单的「诊断信息」中核对版本为 **0.2.6**。如果仍是旧版，等当前任务结束后再重启 Codex。
 
 GitHub 安装的卸载命令：
 
