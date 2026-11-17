@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.2.7 — 2026-11-18
+
+- 收录 GPT-6.2 Astra 与 Sol 的标准、Fast、Ultrafast 费率，以及 GPT-6.2 Astra for Law 的标准费率。三者均覆盖短、长上下文和 30 分钟缓存写入。
+- Astra 与 Sol 的 Ultrafast 按响应记录时间处理优惠。美国太平洋时间 2027-03-01 起，费率从标准档的 3 倍切换到 6 倍。该日期之前的历史响应继续按优惠价估算。[OpenAI API 价表](https://developers.openai.com/api/docs/pricing#ultrafast-promotion-pricing-data)
+
 ## 0.2.6 — 2026-10-30
 
 - 按官方 API 价表加入 GPT-6.1 Terra 的标准、Fast 与长上下文价格，以及 GPT-6 Astra / GPT-6.1 Sol 的 Ultrafast 完整费率。未收录的模型与档位组合不再套用标准价。

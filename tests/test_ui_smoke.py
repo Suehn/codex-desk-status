@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.join(ROOT, "server"))
 from fixture_builder import Rollout, fixture_uuid, standard_response, build_edge_fixtures, build_harness_fixtures  # noqa: E402
 from desk_status.discovery import SessionIndex  # noqa: E402
 from desk_status.gitinfo import GitCache  # noqa: E402
+from desk_status.pricing import PRICES_AS_OF  # noqa: E402
 from desk_status.status import StatusService  # noqa: E402
 
 ROLES = ["low", "long", "missing", "switched", "multi", "fresh", "quota-joined", "quota-apart", "gaps", "many", "untimed", "alpha", "nocache", "legacy"]
@@ -38,6 +39,7 @@ class UiSmoke(unittest.TestCase):
         snaps = {r: svc.snapshot(manual_id=ids[r], include_sessions=True) for r in ROLES}
         speed_root = os.path.join(cls.tmp, "speed-tiers")
         for n, (role, model, tier) in enumerate((
+                ("sol-62", "gpt-6.2-sol", "default"),
                 ("ultrafast", "gpt-6.1-sol", "ultrafast"),
                 ("terra", "gpt-6.1-terra", "default"),
                 ("unpriced-tier", "gpt-6.1-terra", "ultrafast"),
@@ -235,7 +237,7 @@ class UiSmoke(unittest.TestCase):
 
     def test_price_source_is_one_footnote_and_readings(self):
         s = self.out["long"]["session"]
-        self.assertIn("gpt-6-astra · high · 内置 API 价 2026-10", s["text"])
+        self.assertIn(f"gpt-6-astra · high · 内置 API 价 {PRICES_AS_OF}", s["text"])
         self.assertIn("长上下文2次", s["text"])
         self.assertNotIn("不是账单；", s["text"])  # the terms are the footnote's readout
         self.assertTrue(any("不是账单" in t for t in s["tips"]), s["tips"])
@@ -301,6 +303,13 @@ class UiSmoke(unittest.TestCase):
         self.assertIn("$0.69", s["session"]["text"])
         for card in ("session", "cache", "speed"):
             self.assertIn("Ultrafast", s[card]["text"])
+
+    def test_sol_62_standard_displays_session_cost(self):
+        s = self.out["sol-62"]
+        self.assertEqual(s["errors"], [])
+        self.assertIn("gpt-6.2-sol", s["session"]["text"])
+        self.assertIn("API 价估算", s["session"]["text"])
+        self.assertIn("$0.12", s["session"]["text"])
 
     def test_terra_61_is_priced_and_unknown_tier_explained(self):
         s = self.out["terra"]

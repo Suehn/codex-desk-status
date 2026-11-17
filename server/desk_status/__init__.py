@@ -4,7 +4,7 @@ Standard library only. Reads local Codex rollout logs read-only and serves a
 self-contained MCP Apps UI resource.
 """
 
-__version__ = "0.2.6"
+__version__ = "0.2.7"
 
 SERVER_NAME = "desk-status"
 # The host persists this resource URI with saved panels. Keep the published identity

@@ -13,12 +13,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "server"))
 
-from fixture_builder import build_edge_fixtures  # noqa: E402
+from fixture_builder import Rollout, build_edge_fixtures, fixture_uuid  # noqa: E402
 from desk_status import pricing  # noqa: E402
 from desk_status.discovery import SessionIndex  # noqa: E402
 from desk_status.gitinfo import GitCache  # noqa: E402
 from desk_status.status import StatusService  # noqa: E402
-from desk_status.telemetry import SessionState  # noqa: E402
+from desk_status.telemetry import SessionState, parse_ts_ms  # noqa: E402
 
 
 def total_cost(session):
@@ -26,6 +26,53 @@ def total_cost(session):
 
 
 class PricingRules(unittest.TestCase):
+    def test_gpt_62_rates_and_context_boundary(self):
+        for model, tier, short, long in (
+            ("gpt-6.2-astra", "standard", (8, 0.4, 10, 40), (16, 0.8, 20, 60)),
+            ("gpt-6.2-astra", "priority", (16, 0.8, 20, 80), (32, 1.6, 40, 120)),
+            ("gpt-6.2-sol", "default", (2, 0.1, 2.5, 10), (4, 0.2, 5, 15)),
+            ("gpt-6.2-sol", "fast", (4, 0.2, 5, 20), (8, 0.4, 10, 30)),
+            ("gpt-6.2-astra-law", "default", (8, 0.4, 10, 40), (16, 0.8, 20, 60)),
+        ):
+            with self.subTest(model=model, tier=tier):
+                short_rate = pricing.rate_for(model, tier, 272_000)
+                long_rate = pricing.rate_for(model, tier, 272_001)
+                self.assertEqual((short_rate[:4], short_rate.long), (short, False))
+                self.assertEqual((long_rate[:4], long_rate.long), (long, True))
+
+    def test_gpt_62_ultrafast_promotion_ends_at_pacific_midnight(self):
+        before = parse_ts_ms("2027-02-28T23:59:59.999-08:00")
+        after = parse_ts_ms("2027-03-01T00:00:00-08:00")
+        for model, prompt, promotion, regular in (
+            ("gpt-6.2-astra", 272_000, (24, 1.2, 30, 120), (48, 2.4, 60, 240)),
+            ("gpt-6.2-astra", 272_001, (48, 2.4, 60, 180), (96, 4.8, 120, 360)),
+            ("gpt-6.2-sol", 272_000, (6, 0.3, 7.5, 30), (12, 0.6, 15, 60)),
+            ("gpt-6.2-sol", 272_001, (12, 0.6, 15, 45), (24, 1.2, 30, 90)),
+        ):
+            with self.subTest(model=model, prompt=prompt):
+                self.assertEqual(pricing.rate_for(model, "ultrafast", prompt, at_ms=before)[:4], promotion)
+                self.assertEqual(pricing.rate_for(model, "ultrafast", prompt, at_ms=after)[:4], regular)
+
+    def test_gpt_62_snapshot_keeps_historical_cost_when_promotion_ends(self):
+        model = "gpt-6.2-sol"
+        cutoff = parse_ts_ms("2027-03-01T08:00:00Z")
+        rollout = Rollout(fixture_uuid(679), start_ms=cutoff - 2_000)
+        rollout.thread_settings(model, "high", "ultrafast")
+        rollout.start_turn(model=model)
+        rollout.usage(inp=100_000, cached=50_000, out=1_000)
+
+        with tempfile.TemporaryDirectory() as root:
+            rollout.write(root)
+            service = StatusService(SessionIndex([root]), GitCache(enabled=False),
+                                    clock=lambda: cutoff / 1000)
+            session = service.snapshot(manual_id=rollout.id)["session"]
+
+        self.assertAlmostEqual(total_cost(session), 0.345)
+        self.assertAlmostEqual(session["timeline"][0][1], 0.345)
+        estimate = session["cache"]["estimate"]
+        self.assertEqual(estimate["rate"]["input"], 12)
+        self.assertAlmostEqual(estimate["saved"]["paid"], 0.315)
+
     def test_terra_61_rates_and_context_boundary(self):
         for tier, expected in (("default", (1, 0.05, 1.25, 5)),
                                ("priority", (2, 0.1, 2.5, 10))):
@@ -56,7 +103,8 @@ class PricingRules(unittest.TestCase):
                         self.assertAlmostEqual(accelerated[part], regular[part] * 6)
 
     def test_unlisted_model_tiers_are_unpriced_instead_of_standard(self):
-        for model, tier in (("gpt-6.1-terra", "ultrafast"), ("gpt-6-astra", "future-tier"),
+        for model, tier in (("gpt-6.2-astra-law", "fast"), ("gpt-6.2-astra-law", "ultrafast"),
+                            ("gpt-6.1-terra", "ultrafast"), ("gpt-6-astra", "future-tier"),
                             ("gpt-5.1", "fast")):
             self.assertIsNone(pricing.rate_for(model, tier, 1000))
             self.assertIsNone(pricing.request_cost(model, tier, {"input_tokens": 1000, "output_tokens": 10}))
