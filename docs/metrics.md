@@ -18,10 +18,10 @@
 
 内置价表在 `server/desk_status/pricing.py`。响应按所属轮次的模型和速度档位取价。`default` 和 `standard` 对应标准档，`priority` 和 `fast` 对应 Fast，`ultrafast` 对应 Ultrafast。采用长上下文费率的模型按单次请求判断，输入超过 272,000 tokens 时，整次请求按长上下文费率计算。价表未收录的型号和档位组合显示为未计价。
 
-GPT-6.2 Astra 与 Sol 的 Ultrafast 在美国太平洋时间 2027-03-01 零点前按标准档的 3 倍计算，此后按 6 倍计算。历史费用取响应的用量记录时间。下次请求的缓存估算取面板刷新时间。GPT-6.2 Astra for Law 采用标准档的公开费率，官方确认该价格至少持续到 2026-12-31。[OpenAI API 价表](https://developers.openai.com/api/docs/pricing)
+GPT-6.2 Astra 与 Sol 的 Ultrafast 费用参考值按订阅内额度倍数折算。输入、缓存读写和输出均采用对应的标准 API 价 ×6。该规则用于历史响应和下次请求的缓存估算。GPT-6.2 Astra for Law 采用标准档的公开费率，官方确认该价格至少持续到 2026-12-31。[Codex 官方定价](https://learn.chatgpt.com/docs/pricing?codex-pricing-speed=ultrafast#speed-multipliers) · [OpenAI API 价表](https://developers.openai.com/api/docs/pricing)
 
 缓存用量缺失时，按已记录的缓存用量和剩余的未缓存输入估算，面板会标明假设。输入或输出用量缺失时，金额只包含已记录的部分，面板标明「不完整」。多代理合计中若有线程未计价或用量不全，显示「已计价」。
 
 下次请求的提示长度取本次的输入量加输出量。「若命中」假设原输入按缓存读取价计算，新增部分按输入价计算。「若未命中」则假设整段提示都未从缓存读到。未读到的输入可能按输入价或缓存写入价计费，两者构成估算区间。
 
-费用采用 API 标价估算。额度卡采用会话日志实际记录的订阅额度快照。[Codex 官方定价](https://learn.chatgpt.com/docs/pricing)
+费用卡显示美元参考值，额度卡采用会话日志实际记录的订阅额度快照。

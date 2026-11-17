@@ -3,7 +3,8 @@
 ## 0.2.7 — 2026-11-18
 
 - 收录 GPT-6.2 Astra 与 Sol 的标准、Fast、Ultrafast 费率，以及 GPT-6.2 Astra for Law 的标准费率。三者均覆盖短、长上下文和 30 分钟缓存写入。
-- Astra 与 Sol 的 Ultrafast 按响应记录时间处理优惠。美国太平洋时间 2027-03-01 起，费率从标准档的 3 倍切换到 6 倍。该日期之前的历史响应继续按优惠价估算。[OpenAI API 价表](https://developers.openai.com/api/docs/pricing#ultrafast-promotion-pricing-data)
+- Astra 与 Sol 的 Ultrafast 费用参考值用标准 API 价 ×6 折算，与订阅内额度的倍数一致。[Codex 官方定价](https://learn.chatgpt.com/docs/pricing?codex-pricing-speed=ultrafast#speed-multipliers)
+- MCP 进程在启动时读取面板资源。原安装目录替换后，运行中的进程仍可提供它对应的面板。
 
 ## 0.2.6 — 2026-10-30
 

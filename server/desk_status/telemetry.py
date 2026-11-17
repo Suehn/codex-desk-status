@@ -510,7 +510,7 @@ class SessionState:
             "invalidReason": reason,
             "tokensPerSecond": (output * 1000.0 / duration) if valid and duration else None,
         }
-        cost = request_cost(model, tier, usage, at_ms=ts)
+        cost = request_cost(model, tier, usage)
         sample["cost"] = None if cost is None else cost["read"] + cost["write"] + cost["uncached"] + cost["output"]
         sample["costFlags"] = None if cost is None else (cost["long"], cost["cacheMissing"], cost["usageMissing"])
         self.samples.append(sample)

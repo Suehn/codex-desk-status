@@ -151,7 +151,7 @@
     return min + " 分钟";
   }
   // ------------------------------------------------------------------
-  // Money. Every figure is priced by the server from its built-in API price table, each
+  // Money. Every figure is priced by the server from its built-in price table, each
   // request at its own rates (server/desk_status/pricing.py); the panel adds them up and says
   // it is an estimate. Nothing here knows a price.
   // ------------------------------------------------------------------
@@ -160,6 +160,9 @@
     if (!value || value === "default" || value === "standard") return "标准";
     if (value === "priority" || value === "fast") return "Fast";
     return value === "ultrafast" ? "Ultrafast" : value;
+  }
+  function usesIncludedUltrafast(model, tier) {
+    return tierName(tier) === "Ultrafast" && typeof model === "string" && /^gpt-6\.2-(astra|sol)$/i.test(model.trim());
   }
   function fmtUsd(v) {
     if (!isNum(v)) return "—";
@@ -1167,7 +1170,7 @@
       // of its usage says so beside the figure, not only in the card
       var priced = sc && sc.priced;
       setTab_("session", priced ? fmtUsd(sc.total) : sc && sc.tokens ? fmtK(sc.tokens) : "—", s ? null : "muted",
-        "本会话，" + (priced ? "API 价估算 " + fmtUsd(sc.total) + (sc.usageMissing ? "，只含已记录的用量，不完整" : "")
+        "本会话，" + (priced ? sc.priceLabel + " " + fmtUsd(sc.total) + (sc.usageMissing ? "，只含已记录的用量，不完整" : "")
           : sc && sc.tokens ? fmtK(sc.tokens) + " tokens" : s ? "还没有完成的请求" : "读取中"),
         { suffix: priced ? (sc.usageMissing ? "不完整" : "") : sc && sc.tokens ? "tokens" : "" });
     });
@@ -1991,6 +1994,7 @@
     var parts = { read: [0, 0], write: [0, 0], uncached: [0, 0], output: [0, 0] };
     var byLabel = {}, models = [], total = 0, responses = 0, priced = true, anyPriced = false, unpricedResponses = 0;
     var cacheMissing = 0, usageMissing = 0, longResponses = 0, tokens = 0;
+    var includedUltrafast = false;
     (s && s.usage || []).forEach(function (u) {
       if (!u.responses) return;
       responses += u.responses;
@@ -2005,6 +2009,7 @@
         if (c) { parts[p[0]][1] += c[p[0]] || 0; cost += c[p[0]] || 0; }
       });
       if (c) { total += cost; anyPriced = true; } else { priced = false; unpricedResponses += u.responses; }
+      includedUltrafast = includedUltrafast || !!c && usesIncludedUltrafast(u.model, u.serviceTier);
       cacheMissing += u.cacheMissing || 0;
       usageMissing += u.usageMissing || 0;
       longResponses += u.longResponses || 0;
@@ -2017,6 +2022,7 @@
     });
     return { parts: parts, models: models, total: total, responses: responses, tokens: tokens,
       priced: priced && models.length > 0, partial: !priced && anyPriced, unpricedResponses: unpricedResponses,
+      includedUltrafast: includedUltrafast, priceLabel: includedUltrafast ? "费用参考" : "API 价估算",
       cacheMissing: cacheMissing, usageMissing: usageMissing, longResponses: longResponses };
   }
   // a thread's bill as a row shows it: the figure, and whether all of the thread is in it
@@ -2175,10 +2181,11 @@
       d.legend = [{ sw: null, v: fmtK(l.cachedInputTokens), k: "缓存读取", tip: fmtInt(l.cachedInputTokens) + " tokens" },
         write > 0 ? { sw: "soft", v: fmtK(write), k: "缓存写入", tip: fmtInt(write) + " tokens" } : null,
         { sw: "pale", v: fmtK(miss), k: "未缓存输入", tip: fmtInt(miss) + " tokens" }];
-      // what the cache saved on this request at the built-in API prices
+      // what the cache saved on this request at the rates it used
       var sv = c.estimate && c.estimate.saved;
+      var prevIncluded = usesIncludedUltrafast(l.model || s.model, l.serviceTier);
       if (sv && isNum(sv.paid) && isNum(sv.full) && sv.full > sv.paid) d.parts = [{ v: fmtUsd(sv.full - sv.paid), k: "本次节省",
-        tip: "按 API 价：这次输入约 " + fmtUsd(sv.paid) + "；若全部按未缓存输入计约 " + fmtUsd(sv.full) + "（省 " + Math.round((1 - sv.paid / sv.full) * 100) + "%）" }];
+        tip: (prevIncluded ? "按订阅倍数折算" : "按 API 价") + "，这次输入约 " + fmtUsd(sv.paid) + "，若全部按未缓存输入计约 " + fmtUsd(sv.full) + "（省 " + Math.round((1 - sv.paid / sv.full) * 100) + "%）" }];
       // the model's rule, as a reference beside the measured rate: the time it leaves, drawn
       // as a bar that runs down, its ends in words
       if (o && (o.phase === "within" || o.phase === "beyond")) {
@@ -2190,18 +2197,20 @@
             (isNum(o.sent) ? "\n请求于 " + fmtStamp(o.sent) : "") }];
         d.rowsKind = "minor";
       }
-      // the next request's input at the built-in API prices, if it reads the cache or if it does
+      // the next request's input at the built-in rates, if it reads the cache or if it does
       // not; its tokens taken as the last request's input plus output, said in the group's head
       var e = o && o.est;
       if (e) {
         var rt = e.rate, cells = [];
+        var included = usesIncludedUltrafast(e.model, e.tier);
         var basis = "下次输入按上次输入 " + fmtInt(e.readTokens) + " + 输出 " + fmtInt(e.newTokens) + " = " + fmtInt(e.prompt) +
           " tokens 计；之后新加的消息、工具结果和压缩都不在其中。\n";
         if (e.switched) {
           cells.push({ v: usdRange(e.cold, e.coldWritten), k: "新模型若未命中", tone: "warn",
             tip: inputScenarioTip(basis + "换到 " + e.model + " 后，若下次请求读不到缓存：", 0, e.prompt, rt) });
           if (isNum(e.stayWarm)) cells.push({ v: usdRange(e.stayWarm, e.stayWarmWritten), k: "原模型若命中",
-            tip: basis + "缓存是为 " + o.ranOn + " 写入的；留在它上面且缓存仍在时，按 " + o.ranOn + " 的价格估算" });
+            tip: basis + "缓存是为 " + o.ranOn + " 写入的。留在它上面且缓存仍在时，按 " + o.ranOn + " 的" +
+              (prevIncluded ? "订阅倍数折算" : "API 价估算") });
         } else {
           cells.push({ v: usdRange(e.warm, e.warmWritten), k: "下次若命中",
             tip: inputScenarioTip(basis + "假设上次输入的 " + fmtK(e.readTokens) + " tokens 全部从缓存读取：", e.readTokens, e.newTokens, rt) });
@@ -2210,7 +2219,7 @@
         }
         // after a switch the two cells are priced on two models, each named in its cell: the
         // head says which two, from the old to the new
-        d.stats = { head: ["下次输入 · 按上次输入 + 输出量", "API 价 · " + (e.switched ? o.ranOn + " → " : "") + e.model + " · " +
+        d.stats = { head: ["下次输入 · 按上次输入 + 输出量", (included ? "订阅 6 倍折算" : "API 价") + " · " + (e.switched ? o.ranOn + " → " : "") + e.model + " · " +
           tierName(e.tier) + (e.long ? " · 长上下文" : "")], cells: cells };
       }
       var ch = c.history || [];
@@ -2278,7 +2287,7 @@
       d.notes = [];
       var shown = PARTS.filter(function (p) { return sc.parts[p[0]][0] > 0; });
       if (sc.priced) {
-        d.value = fmtUsd(sc.total); d.note = sc.usageMissing ? "API 价估算 · 不完整" : "API 价估算";
+        d.value = fmtUsd(sc.total); d.note = sc.priceLabel + (sc.usageMissing ? " · 不完整" : "");
         d.viz = bar(PARTS.map(function (p) { return [sc.total > 0 ? sc.parts[p[0]][1] / sc.total : 0, p[2]]; }), "本会话费用 " + fmtUsd(sc.total));
         d.legend = shown.map(function (p) { return { sw: p[2], v: fmtUsd(sc.parts[p[0]][1]), k: p[1], tip: fmtInt(sc.parts[p[0]][0]) + " tokens" }; });
         // each request at the cost the total was summed from, a column a request; a column's
@@ -2321,7 +2330,10 @@
       if (cells.length) d.parts = cells;
       // the model it ran on and the prices used, one line; the breakdown and the terms on focus
       var asOf = snap.pricing && snap.pricing.asOf;
-      var priceTerms = "按内置的 OpenAI API 价目表逐次估算，不是账单；订阅不按此计费。\n每次请求按它自己的模型、档位与输入量取价。";
+      var priceTerms = "每次请求按模型、档位与输入量估算。\n";
+      priceTerms += sc.includedUltrafast
+        ? "GPT-6.2 Astra 和 Sol 的 Ultrafast 按标准 API 价 ×6 折算。实际订阅额度以额度卡读数为准。"
+        : "美元金额按内置的 OpenAI API 价目表估算。实际订阅额度以额度卡读数为准。";
       var modelText;
       var tip = null;
       if (sc.models.length > 1) {
@@ -2330,7 +2342,8 @@
         tip = byCost.map(function (m) { return m.label + "  " + (m.priced ? fmtUsd(m.cost) : "未收录单价") + " · " + m.responses + " 次"; }).join("\n");
       } else modelText = [s.model, s.effort, s.serviceTier ? tierName(s.serviceTier) : null].filter(Boolean).join(" · ") || "模型未记录";
       if (sc.priced || sc.partial) tip = (tip ? tip + "\n" : "") + priceTerms;
-      d.fn = { text: modelText + (sc.priced || sc.partial ? " · 内置 API 价" + (asOf ? " " + asOf : "") : ""), tip: tip };
+      var source = sc.includedUltrafast ? "GPT-6.2 Ultrafast 按订阅 6 倍折算" : "内置 API 价" + (asOf ? " " + asOf : "");
+      d.fn = { text: modelText + (sc.priced || sc.partial ? " · " + source : ""), tip: tip };
       if (s.idMismatch) d.notes.push({ text: "日志内的会话 ID 与文件名不一致，不作为当前会话。", tone: "warn" });
       return d;
     }

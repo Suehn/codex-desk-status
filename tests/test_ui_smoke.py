@@ -40,6 +40,7 @@ class UiSmoke(unittest.TestCase):
         speed_root = os.path.join(cls.tmp, "speed-tiers")
         for n, (role, model, tier) in enumerate((
                 ("sol-62", "gpt-6.2-sol", "default"),
+                ("sol-62-ultrafast", "gpt-6.2-sol", "ultrafast"),
                 ("ultrafast", "gpt-6.1-sol", "ultrafast"),
                 ("terra", "gpt-6.1-terra", "default"),
                 ("unpriced-tier", "gpt-6.1-terra", "ultrafast"),
@@ -239,8 +240,8 @@ class UiSmoke(unittest.TestCase):
         s = self.out["long"]["session"]
         self.assertIn(f"gpt-6-astra · high · 内置 API 价 {PRICES_AS_OF}", s["text"])
         self.assertIn("长上下文2次", s["text"])
-        self.assertNotIn("不是账单；", s["text"])  # the terms are the footnote's readout
-        self.assertTrue(any("不是账单" in t for t in s["tips"]), s["tips"])
+        self.assertNotIn("实际订阅额度", s["text"])  # the terms are the footnote's readout
+        self.assertTrue(any("实际订阅额度以额度卡读数为准" in t for t in s["tips"]), s["tips"])
 
     def test_speed_average_and_its_columns_agree(self):
         """Fourteen untimed replies after six timed ones: the average is of five, and all five
@@ -310,6 +311,14 @@ class UiSmoke(unittest.TestCase):
         self.assertIn("gpt-6.2-sol", s["session"]["text"])
         self.assertIn("API 价估算", s["session"]["text"])
         self.assertIn("$0.12", s["session"]["text"])
+
+    def test_sol_62_ultrafast_labels_the_six_times_cost(self):
+        s = self.out["sol-62-ultrafast"]
+        self.assertEqual(s["errors"], [])
+        self.assertIn("$0.69", s["session"]["text"])
+        self.assertIn("费用参考", s["session"]["text"])
+        self.assertIn("按订阅 6 倍折算", s["session"]["text"])
+        self.assertIn("订阅 6 倍折算", s["cache"]["text"])
 
     def test_terra_61_is_priced_and_unknown_tier_explained(self):
         s = self.out["terra"]

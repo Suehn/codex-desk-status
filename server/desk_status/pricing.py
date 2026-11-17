@@ -2,8 +2,8 @@
 
 This is the panel's only price source: the server prices each request as it is read, so a
 session's total, its parts, its cost line and its subagents all add up from the same numbers.
-The figures are an estimate at OpenAI API list prices as recorded in this table (as of
-``PRICES_AS_OF``); they are not a bill, and a subscription is not charged this way.
+The figures use OpenAI API list prices as of ``PRICES_AS_OF`` as a reference.
+GPT-6.2 Ultrafast applies the included-usage multiplier to Standard API rates.
 
     cost = uncached × input + cached × cache read + write × cache write + output × output
 
@@ -19,28 +19,25 @@ pays them. The rule is applied to each request's own input, never to a session's
 
 from __future__ import annotations
 
-import time
-from datetime import datetime, timezone
 from typing import Any, Dict, NamedTuple, Optional, Tuple
 
 PRICES_AS_OF = "2026-11-18"
 # https://developers.openai.com/api/docs/pricing (Standard, Fast, Ultrafast)
-# Midnight on March 1, 2027 in Pacific Standard Time (UTC−8).
-GPT_62_ULTRAFAST_PROMO_END_MS = int(datetime(2027, 3, 1, 8, tzinfo=timezone.utc).timestamp() * 1000)
+# https://learn.chatgpt.com/docs/pricing#speed-multipliers (GPT-6.2 included usage)
 
 Rates = Tuple[float, float, Optional[float], float]
 
-# Ultrafast entries are list rates. The applicable promotion is half of those rates.
+# GPT-6.2 Ultrafast uses six times each corresponding Standard rate.
 TABLE: Dict[str, Dict[str, Any]] = {
     "gpt-6.2-astra": {
         "std": (8, 0.4, 10, 40), "fast": (16, 0.8, 20, 80), "ultrafast": (48, 2.4, 60, 240),
         "long_above": 272_000, "std_long": (16, 0.8, 20, 60), "fast_long": (32, 1.6, 40, 120),
-        "ultrafast_long": (96, 4.8, 120, 360), "ultrafast_promo_end_ms": GPT_62_ULTRAFAST_PROMO_END_MS,
+        "ultrafast_long": (96, 4.8, 120, 360),
     },
     "gpt-6.2-sol": {
         "std": (2, 0.1, 2.5, 10), "fast": (4, 0.2, 5, 20), "ultrafast": (12, 0.6, 15, 60),
         "long_above": 272_000, "std_long": (4, 0.2, 5, 15), "fast_long": (8, 0.4, 10, 30),
-        "ultrafast_long": (24, 1.2, 30, 90), "ultrafast_promo_end_ms": GPT_62_ULTRAFAST_PROMO_END_MS,
+        "ultrafast_long": (24, 1.2, 30, 90),
     },
     "gpt-6.2-astra-law": {
         "std": (8, 0.4, 10, 40), "long_above": 272_000, "std_long": (16, 0.8, 20, 60),
@@ -105,8 +102,7 @@ def is_long(model: Optional[str], input_tokens: Optional[int]) -> bool:
     return bool(limit and isinstance(input_tokens, int) and input_tokens > limit)
 
 
-def rate_for(model: Optional[str], tier: Optional[str], input_tokens: Optional[int], *,
-             at_ms: Optional[int] = None) -> Optional[Rate]:
+def rate_for(model: Optional[str], tier: Optional[str], input_tokens: Optional[int]) -> Optional[Rate]:
     m = model_entry(model)
     if m is None:
         return None
@@ -116,15 +112,10 @@ def rate_for(model: Optional[str], tier: Optional[str], input_tokens: Optional[i
         return None
     long = is_long(model, input_tokens)
     inp, read, write, out = m.get(key + "_long", m[key]) if long else m[key]
-    write = inp if write is None else write
-    promo_end = m.get("ultrafast_promo_end_ms") if key == "ultrafast" else None
-    if promo_end is not None and (at_ms if at_ms is not None else time.time() * 1000) < promo_end:
-        return Rate(inp / 2, read / 2, write / 2, out / 2, mode, long)
-    return Rate(inp, read, write, out, mode, long)
+    return Rate(inp, read, inp if write is None else write, out, mode, long)
 
 
-def request_cost(model: Optional[str], tier: Optional[str], usage: Dict[str, int], *,
-                 at_ms: Optional[int] = None) -> Optional[Dict[str, Any]]:
+def request_cost(model: Optional[str], tier: Optional[str], usage: Dict[str, int]) -> Optional[Dict[str, Any]]:
     """One request at its own rates: the USD cost of each part, or None when the model/tier
     combination is not in the table. Two kinds of gap in the log are priced as they stand and flagged:
 
@@ -135,7 +126,7 @@ def request_cost(model: Optional[str], tier: Optional[str], usage: Dict[str, int
     - ``usageMissing``: the input or the output count was not recorded. Only the parts recorded
       are priced, so the cost covers part of the request.
     """
-    rate = rate_for(model, tier, usage.get("input_tokens"), at_ms=at_ms)
+    rate = rate_for(model, tier, usage.get("input_tokens"))
     if rate is None:
         return None
     has_input = "input_tokens" in usage
@@ -156,9 +147,8 @@ def request_cost(model: Optional[str], tier: Optional[str], usage: Dict[str, int
     }
 
 
-def public_rate(model: Optional[str], tier: Optional[str], input_tokens: Optional[int], *,
-                at_ms: Optional[int] = None) -> Optional[Dict[str, Any]]:
-    r = rate_for(model, tier, input_tokens, at_ms=at_ms)
+def public_rate(model: Optional[str], tier: Optional[str], input_tokens: Optional[int]) -> Optional[Dict[str, Any]]:
+    r = rate_for(model, tier, input_tokens)
     if r is None:
         return None
     return {"input": r.input, "read": r.read, "write": r.write, "output": r.output, "tier": r.tier, "long": r.long}

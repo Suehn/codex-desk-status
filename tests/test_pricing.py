@@ -40,38 +40,23 @@ class PricingRules(unittest.TestCase):
                 self.assertEqual((short_rate[:4], short_rate.long), (short, False))
                 self.assertEqual((long_rate[:4], long_rate.long), (long, True))
 
-    def test_gpt_62_ultrafast_promotion_ends_at_pacific_midnight(self):
-        before = parse_ts_ms("2027-02-28T23:59:59.999-08:00")
-        after = parse_ts_ms("2027-03-01T00:00:00-08:00")
-        for model, prompt, promotion, regular in (
-            ("gpt-6.2-astra", 272_000, (24, 1.2, 30, 120), (48, 2.4, 60, 240)),
-            ("gpt-6.2-astra", 272_001, (48, 2.4, 60, 180), (96, 4.8, 120, 360)),
-            ("gpt-6.2-sol", 272_000, (6, 0.3, 7.5, 30), (12, 0.6, 15, 60)),
-            ("gpt-6.2-sol", 272_001, (12, 0.6, 15, 45), (24, 1.2, 30, 90)),
-        ):
-            with self.subTest(model=model, prompt=prompt):
-                self.assertEqual(pricing.rate_for(model, "ultrafast", prompt, at_ms=before)[:4], promotion)
-                self.assertEqual(pricing.rate_for(model, "ultrafast", prompt, at_ms=after)[:4], regular)
-
-    def test_gpt_62_snapshot_keeps_historical_cost_when_promotion_ends(self):
+    def test_gpt_62_snapshot_applies_six_times_to_earlier_responses(self):
         model = "gpt-6.2-sol"
-        cutoff = parse_ts_ms("2027-03-01T08:00:00Z")
-        rollout = Rollout(fixture_uuid(679), start_ms=cutoff - 2_000)
+        rollout = Rollout(fixture_uuid(679), start_ms=parse_ts_ms("2026-11-18T00:00:00Z"))
         rollout.thread_settings(model, "high", "ultrafast")
         rollout.start_turn(model=model)
         rollout.usage(inp=100_000, cached=50_000, out=1_000)
 
         with tempfile.TemporaryDirectory() as root:
             rollout.write(root)
-            service = StatusService(SessionIndex([root]), GitCache(enabled=False),
-                                    clock=lambda: cutoff / 1000)
+            service = StatusService(SessionIndex([root]), GitCache(enabled=False))
             session = service.snapshot(manual_id=rollout.id)["session"]
 
-        self.assertAlmostEqual(total_cost(session), 0.345)
-        self.assertAlmostEqual(session["timeline"][0][1], 0.345)
+        self.assertAlmostEqual(total_cost(session), 0.69)
+        self.assertAlmostEqual(session["timeline"][0][1], 0.69)
         estimate = session["cache"]["estimate"]
         self.assertEqual(estimate["rate"]["input"], 12)
-        self.assertAlmostEqual(estimate["saved"]["paid"], 0.315)
+        self.assertAlmostEqual(estimate["saved"]["paid"], 0.63)
 
     def test_terra_61_rates_and_context_boundary(self):
         for tier, expected in (("default", (1, 0.05, 1.25, 5)),
@@ -86,7 +71,7 @@ class PricingRules(unittest.TestCase):
                 self.assertTrue(long.long)
 
     def test_ultrafast_is_six_times_standard_including_cache_and_long_context(self):
-        for model in ("gpt-6-astra", "gpt-6.1-sol"):
+        for model in ("gpt-6.2-astra", "gpt-6.2-sol", "gpt-6-astra", "gpt-6.1-sol"):
             for prompt in (272_000, 272_001):
                 with self.subTest(model=model, prompt=prompt):
                     std = pricing.rate_for(model, "default", prompt)

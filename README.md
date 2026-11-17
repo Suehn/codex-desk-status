@@ -62,7 +62,7 @@ python3 scripts/install.py --update-installed
 
 这会通过 `codex plugin list --json` 找到现有本地 marketplace，更新源文件并重新安装 Codex 缓存。只更新源码或另加一个 GitHub marketplace，不会替换原来启用的本地版。此命令要求恰好存在一个已启用的本地安装；多个安装时用 `--marketplace DIR --register` 明确指定。Windows 使用 `py scripts/install.py --update-installed --python python`。
 
-安装完成后关闭并重新打开「会话状态」，在右下角菜单的「诊断信息」中核对版本为 **0.2.7**。如果仍是旧版，等当前任务结束后再重启 Codex。
+安装完成后关闭并重新打开「会话状态」，在右下角菜单的「诊断信息」中核对版本为 **0.2.7**。如果仍是旧版或显示「未能显示会话状态」，等活跃任务结束后完全退出并重新打开 Codex，使宿主重启插件服务。
 
 GitHub 安装的卸载命令：
 
@@ -87,10 +87,10 @@ python3 scripts/install.py --marketplace ~/codex-desk-status-local --uninstall -
 | 额度 | 日志中的额度快照及记录时间，可能滞后 |
 | 缓存 | 本次和最近几次响应的提示缓存命中率 |
 | 速度 | 同模型、同推理强度、同速度档位最近 5 个有效样本的加权 tok/s |
-| 费用 | 按随包价表计算的 API 价格估算，不能作为订阅账单 |
+| 费用 | 按随包价格计算的美元参考值。GPT-6.2 Ultrafast 采用订阅额度的 6 倍折算 |
 | 会话 / Git | 模型、推理强度、工作目录、分支及改动数量 |
 
-支持浅色 / 深色、手动选择会话、历史读数和分段日志。0.2.7 收录 GPT-6.2 Astra 与 Sol 的标准、Fast、Ultrafast 费率，以及 Astra for Law 的标准费率。费用按随包 API 价表估算，订阅额度以日志里的实际快照为准。费率切换、缓存和长上下文的计价口径见 [指标说明](docs/metrics.md)。
+支持浅色 / 深色、手动选择会话、历史读数和分段日志。0.2.7 收录 GPT-6.2 Astra 与 Sol 的标准、Fast、Ultrafast 费率，以及 Astra for Law 的标准费率。GPT-6.2 Ultrafast 费用参考值默认以标准 API 价 ×6 折算。订阅额度以日志里的实际快照为准。缓存和长上下文的计价口径见 [指标说明](docs/metrics.md)。
 
 ## 配置和排障
 

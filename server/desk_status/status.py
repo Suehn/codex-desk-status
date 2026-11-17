@@ -359,7 +359,7 @@ class StatusService:
                 "resets": log.resets,
             },
             "context": self._context(st),
-            "cache": self._cache(st, now_ms),
+            "cache": self._cache(st),
             "throughput": self._throughput(st),
             "git": self.git.get(cwd),
             "diagnostics": dict(st.counters),
@@ -403,7 +403,7 @@ class StatusService:
         }
 
     @staticmethod
-    def _cache(st: SessionState, now_ms: int) -> Dict[str, Any]:
+    def _cache(st: SessionState) -> Dict[str, Any]:
         """cached_input_tokens / input_tokens. An absent cached count is "not
         recorded", never a zero hit rate; the recent ratio only sums responses
         that carry both numbers and reports how many were usable."""
@@ -458,10 +458,10 @@ class StatusService:
             if s.get("at") is not None and s.get("inputTokens") and s.get("cachedInputTokens") is not None
         ]
         return {"latest": latest, "recent": recent, "history": history,
-                "estimate": StatusService._cache_estimate(st, latest, now_ms)}
+                "estimate": StatusService._cache_estimate(st, latest)}
 
     @staticmethod
-    def _cache_estimate(st: SessionState, latest: Optional[Dict[str, Any]], now_ms: int) -> Optional[Dict[str, Any]]:
+    def _cache_estimate(st: SessionState, latest: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """What the next request's input might cost, as conditional scenarios at the built-in
         API prices: its prompt taken as this one plus this response, either read from the cache
         (this prompt) or not. Tokens not read are billed as input, or at the cache-write rate
@@ -476,7 +476,7 @@ class StatusService:
         inp, out = latest["inputTokens"], latest.get("outputTokens") or 0
         prompt = inp + out
         switched = bool(latest.get("model") and st.model and latest["model"] != st.model)
-        rate = public_rate(nxt, st.service_tier, prompt, at_ms=now_ms)
+        rate = public_rate(nxt, st.service_tier, prompt)
         if rate is None:
             return {"model": nxt, "tier": st.service_tier, "ranOn": ran_on, "switched": switched, "prompt": prompt, "priced": False}
         est = {
@@ -492,15 +492,13 @@ class StatusService:
         if latest.get("cachedInputTokens") is not None:
             usage = {"input_tokens": inp, "cached_input_tokens": latest["cachedInputTokens"],
                      "cache_write_input_tokens": latest.get("cacheWriteInputTokens") or 0, "output_tokens": 0}
-            paid = request_cost(ran_on, latest.get("serviceTier"), usage, at_ms=latest["at"])
-            full = request_cost(ran_on, latest.get("serviceTier"),
-                                {"input_tokens": inp, "cached_input_tokens": 0, "output_tokens": 0},
-                                at_ms=latest["at"])
+            paid = request_cost(ran_on, latest.get("serviceTier"), usage)
+            full = request_cost(ran_on, latest.get("serviceTier"), {"input_tokens": inp, "cached_input_tokens": 0, "output_tokens": 0})
             if paid is not None and full is not None:
                 est["saved"] = {"paid": paid["read"] + paid["write"] + paid["uncached"], "full": full["uncached"]}
         if switched:
             # staying on the model the cache was written for, should it still be there
-            prev = public_rate(ran_on, latest.get("serviceTier"), prompt, at_ms=now_ms)
+            prev = public_rate(ran_on, latest.get("serviceTier"), prompt)
             if prev is not None:
                 est["stayWarm"] = (inp * prev["read"] + out * prev["input"]) / 1e6
                 est["stayWarmWritten"] = (inp * prev["read"] + out * prev["write"]) / 1e6

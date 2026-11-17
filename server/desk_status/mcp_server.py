@@ -275,16 +275,18 @@ RESOURCE_META = {
 class UiResource:
     def __init__(self, path: str = UI_DIST):
         self.path = path
-        self._cache: Optional[Tuple[float, str]] = None
+        # The host can replace the installed plugin while this process is alive.
+        # Hold the matching panel for the lifetime of this server.
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                self._html: Optional[str] = fh.read()
+        except OSError:
+            self._html = None
 
     def html(self) -> str:
-        st = os.stat(self.path)
-        if self._cache and self._cache[0] == st.st_mtime:
-            return self._cache[1]
-        with open(self.path, "r", encoding="utf-8") as fh:
-            text = fh.read()
-        self._cache = (st.st_mtime, text)
-        return text
+        if self._html is None:
+            raise FileNotFoundError(self.path)
+        return self._html
 
 
 # --------------------------------------------------------------------------

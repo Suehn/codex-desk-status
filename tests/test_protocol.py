@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.join(ROOT, "server"))
 
 from fixture_builder import build_harness_fixtures  # noqa: E402
 from desk_status import UI_RESOURCE_URI  # noqa: E402
+from desk_status.mcp_server import UiResource  # noqa: E402
 
 SERVER = os.path.join(ROOT, "server", "desk_status_server.py")
 
@@ -142,6 +143,21 @@ class ProtocolTest(unittest.TestCase):
         self.s.send_raw(b'[{"jsonrpc":"2.0","id":1,"method":"ping"}]\n')
         self.assertEqual(self.s.read()["error"]["code"], -32600)
         self.assertEqual(self.s.call("ping")["result"], {})
+
+
+class UiResourceTest(unittest.TestCase):
+    def test_installer_can_replace_bundle_before_first_resource_read(self):
+        with tempfile.TemporaryDirectory() as root:
+            bundle = os.path.join(root, "panel.html")
+            with open(bundle, "w", encoding="utf-8") as fh:
+                fh.write("<p>original panel</p>")
+            resource = UiResource(bundle)
+            os.remove(bundle)
+            self.assertEqual(resource.html(), "<p>original panel</p>")
+            with open(bundle, "w", encoding="utf-8") as fh:
+                fh.write("<p>updated panel</p>")
+            self.assertEqual(resource.html(), "<p>original panel</p>")
+            self.assertEqual(UiResource(bundle).html(), "<p>updated panel</p>")
 
 
 class StdoutHygieneTest(unittest.TestCase):
